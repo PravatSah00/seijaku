@@ -27,6 +27,17 @@ const envSchema = z.object({
   // fast instead of silently no-op on first payment success.
   SHIPROCKET_EMAIL: z.string().email(),
   SHIPROCKET_PASSWORD: z.string().min(1),
+
+  // Brevo api key.
+  BREVO_API_KEY: z.string().min(1),
+  // Brevo template IDs.
+  BREVO_TPL_ORDER_CONFIRMATION: z.coerce.number().min(1),
+  // BREVO_TPL_PAYMENT_SUCCESS: z.coerce.number().optional(),
+  // BREVO_TPL_PAYMENT_FAILED: z.coerce.number().optional(),
+  // BREVO_TPL_SHIPMENT_TRACKING: z.coerce.number().optional(),
+  // BREVO_TPL_WELCOME: z.coerce.number().optional(),
+  // BREVO_TPL_PASSWORD_RESET: z.coerce.number().optional(),
+
 });
 
 export const env = envSchema.parse(process.env);

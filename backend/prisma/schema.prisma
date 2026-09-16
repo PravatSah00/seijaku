@@ -411,6 +411,7 @@ model OrderRequest {
   shipmentPushedAt     DateTime?
   customer             Customer?          @relation(fields: [customerId], references: [id])
   items                OrderRequestItem[]
+  notifications        NotificationLog[]
 
   @@index([shipmentStatus])
 }
@@ -529,6 +530,64 @@ model Story {
 
   @@index([status, launchDate])
 }
+
+///////////////////////////////// Notifications /////////////////////////////////
+model NotificationLog {
+  id           String              @id @default(cuid())
+  subjectId    String
+  channel      NotificationChannel
+  type         NotificationType
+  recipient    String
+  providerId   String?
+  variant      String              @default("")
+  status       NotificationStatus  @default(SENT)
+  errorMessage String?
+  sentAt       DateTime            @default(now())
+
+  orderId String?
+  order   OrderRequest? @relation(fields: [orderId], references: [id], onDelete: SetNull)
+
+  @@unique([subjectId, channel, type, variant])
+  @@index([subjectId])
+  @@index([orderId])
+  @@index([recipient])
+  @@index([channel, sentAt])
+}
+
+enum NotificationChannel {
+  EMAIL
+  WHATSAPP
+  SMS
+}
+
+enum NotificationType {
+  // Order
+  ORDER_CONFIRMATION
+  PAYMENT_SUCCESS
+  PAYMENT_FAILED
+
+  // Shipment lifecycle — one type per stage
+  SHIPMENT_PICKED_UP
+  SHIPMENT_IN_TRANSIT
+  SHIPMENT_OUT_FOR_DELIVERY
+  SHIPMENT_DELIVERED
+  SHIPMENT_RTO
+  SHIPMENT_FAILED
+
+  // Waitlist / account
+  WELCOME
+  WAITLIST_RESTOCK
+  INQUIRY_RECEIVED
+}
+
+enum NotificationStatus {
+  SENT
+  DELIVERED
+  READ
+  FAILED
+}
+
+//////////////////////////////////////////////////////////////////////////////////
 
 enum AdminRole {
   SUPER_ADMIN

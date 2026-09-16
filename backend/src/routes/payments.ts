@@ -12,6 +12,7 @@ import {
 import { pushOrderToShiprocket } from "../lib/shiprocket-dispatch.js";
 import { asyncHandler, HttpError, parseBody } from "../utils/http.js";
 import { calculateShippingRate } from "../lib/shiprocket.js";
+import { sendOrderConfirmation } from "../lib/notifications/catalog/orderConfirmation.js";
 
 export const paymentsRouter = Router();
 
@@ -66,12 +67,12 @@ paymentsRouter.post(
       throw new HttpError(400, "product_not_found");
     }
     const bySlug = new Map(products.map((product) => [product.slug, product]));
-    
+
     const heightCm = products[0]?.heightCm ?? 0;
     const weightGrams = products[0]?.weightGrams ?? 0;
     const lengthCm = products[0]?.lengthCm ?? 0;
     const breadthCm = products[0]?.breadthCm ?? 0;
-    
+
     const result = await calculateShippingRate({
       pincode: payload.shippingPincode,
       weightKg: weightGrams / 1000, // Convert grams to kg
@@ -188,6 +189,10 @@ paymentsRouter.post(
       pushOrderToShiprocket(orderRequest.id).catch((err) => {
         console.error("[payments/verify] shiprocket dispatch crashed", err);
       });
+
+      sendOrderConfirmation(orderRequest.id).catch((err) => {
+        console.error("[payments/verify] order confirmation crashed", err);
+      });
     }
 
     res.json({
@@ -272,6 +277,10 @@ paymentsRouter.post(
             // regardless of dispatch outcome — Decision #34.
             pushOrderToShiprocket(row.id).catch((err) => {
               console.error("[payments/webhook] shiprocket dispatch crashed", err);
+            });
+
+            sendOrderConfirmation(row.id).catch((err) => {
+              console.error("[payments/webhook] order confirmation crashed", err);
             });
           }
         }

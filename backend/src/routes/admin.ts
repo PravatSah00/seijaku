@@ -32,6 +32,7 @@ import {
 } from "../lib/shiprocket.js";
 import { pushOrderToShiprocket } from "../lib/shiprocket-dispatch.js";
 import { asyncHandler, HttpError, parseBody } from "../utils/http.js";
+import { sendOrderConfirmation } from "../lib/notifications/catalog/orderConfirmation.js";
 
 export const adminRouter = Router();
 
@@ -1935,7 +1936,13 @@ adminRouter.post(
   asyncHandler(async (req, res) => {
     const id = routeParam(req, "id");
     if (!id) throw new HttpError(400, "missing_id");
+    
     const outcome = await pushOrderToShiprocket(id);
+
+    sendOrderConfirmation(id).catch((err) => {
+      console.error("[admin/leads] order confirmation crashed", err);
+    });
+    
     if (!outcome.ok) {
       throw new HttpError(400, outcome.error);
     }
