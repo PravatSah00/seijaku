@@ -1,7 +1,4 @@
-// The single entry point app uses to trigger emails.
-
 import { sendTransactional } from "./email.service.js";
-import { buildOrderConfirmationParams, OrderForConfirmation } from "./builders/orderConfirmation.js";
 
 /**
  * Sends an order confirmation email.
@@ -17,32 +14,44 @@ export async function sendOrderConfirmationEmail(
     });
 }
 
-// export function sendPaymentSuccess(order: OrderForPaymentSuccess) {
-//     return sendTransactional({
-//         template: "PAYMENT_SUCCESS",
-//         to: { email: order.customerEmail, name: order.customerName },
-//         params: buildPaymentSuccessParams(order),
-//     });
-// }
+/**
+ * Sends a payment success email.
+ */
+export async function sendPaymentSuccessEmail(
+    to: { email: string; name: string },
+    params: Record<string, unknown>
+) {
+    return sendTransactional({
+        template: "PAYMENT_SUCCESS",
+        to: { email: to.email, name: to.name },
+        params: params,
+    });
+}
 
-// export function sendPaymentFailed(
-//     order: OrderForPaymentFailed,
-//     reason?: string,
-// ) {
-//     return sendTransactional({
-//         template: "PAYMENT_FAILED",
-//         to: { email: order.customerEmail, name: order.customerName },
-//         params: buildPaymentFailedParams(order, reason),
-//     });
-// }
+/**
+ * Sends a payment failed email.
+ */
+export async function sendPaymentFailedEmail(
+    to: { email: string; name: string },
+    params: Record<string, unknown>
+) {
+    return sendTransactional({
+        template: "PAYMENT_FAILED",
+        to: { email: to.email, name: to.name },
+        params: params,
+    });
+}
 
-// export function sendShipmentTracking(
-//     order: OrderForShipment,
-//     shipment: ShipmentInfo,
-// ) {
-//     return sendTransactional({
-//         template: "SHIPMENT_TRACKING",
-//         to: { email: order.customerEmail, name: order.customerName },
-//         params: buildShipmentTrackingParams(order, shipment),
-//     });
-// }
+/**
+ * Sends a shipment update email.
+ */
+export async function sendShipmentUpdateEmail(
+    to: { email: string; name: string },
+    params: Record<string, unknown>
+) {
+    return sendTransactional({
+        template: "SHIPMENT_UPDATE",
+        to: { email: to.email, name: to.name },
+        params: params,
+    });
+}
