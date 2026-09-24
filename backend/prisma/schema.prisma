@@ -21,6 +21,7 @@ model Admin {
 model Customer {
   id                   String                @id @default(cuid())
   email                String                @unique
+  passwordHash         String?
   name                 String?
   phone                String?
   status               CustomerStatus        @default(ACTIVE)

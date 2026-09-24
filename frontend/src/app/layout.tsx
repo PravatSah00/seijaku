@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import localFont from "next/font/local";
 import AppShell from "@/src/components/AppShell";
+import { CustomerAuthProvider } from "@/src/lib/customer-auth";
 import { ShopStateProvider } from "@/src/components/shop/ShopStateProvider";
 import "./globals.css";
 
@@ -49,10 +50,13 @@ export default function RootLayout({
   return (
     <html lang="en">
       <body suppressHydrationWarning className={`${inter.variable} ${playfair.variable} antialiased`}>
-        <ShopStateProvider>
-          <AppShell>{children}</AppShell>
-        </ShopStateProvider>
+        <CustomerAuthProvider>
+          <ShopStateProvider>
+            <AppShell>{children}</AppShell>
+          </ShopStateProvider>
+        </CustomerAuthProvider>
       </body>
     </html>
   );
 }
+
