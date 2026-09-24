@@ -10,6 +10,11 @@ export type AdminTokenPayload = {
   role: AdminRole;
 };
 
+export type CustomerTokenPayload = {
+  customerId: string;
+  email: string;
+};
+
 export async function hashPassword(password: string) {
   return bcrypt.hash(password, 10);
 }
@@ -25,3 +30,12 @@ export function signAdminToken(payload: AdminTokenPayload) {
 export function verifyAdminToken(token: string) {
   return jwt.verify(token, env.JWT_SECRET) as AdminTokenPayload;
 }
+
+export function signCustomerToken(payload: CustomerTokenPayload) {
+  return jwt.sign(payload, env.JWT_SECRET, { expiresIn: "30d" });
+}
+
+export function verifyCustomerToken(token: string) {
+  return jwt.verify(token, env.JWT_SECRET) as CustomerTokenPayload;
+}
+
