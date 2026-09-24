@@ -417,3 +417,16 @@ export function serializeStorySummary(story: any) {
     updatedAt: story.updatedAt.toISOString(),
   };
 }
+
+export function serializeCustomer(customer: any) {
+  return {
+    id: customer.id,
+    email: customer.email,
+    name: customer.name ?? null,
+    phone: customer.phone ?? null,
+    status: customer.status,
+    createdAt: customer.createdAt?.toISOString() ?? new Date().toISOString(),
+    updatedAt: customer.updatedAt?.toISOString() ?? new Date().toISOString(),
+  };
+}
+

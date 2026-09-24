@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import { useRouter } from "next/navigation";
+import { Heart } from "lucide-react";
 
 import { canonicalShopRoutes } from "@/src/lib/shop-routes";
 import {
@@ -84,11 +85,12 @@ export default function ShopProductActions({
         <button
           type="button"
           onClick={() => toggleCollection(item.slug)}
-          className={`text-[11px] uppercase tracking-[0.18em] transition-opacity duration-200 hover:opacity-70 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#8c7b68] focus-visible:ring-offset-2 focus-visible:ring-offset-[#f6f1e8] ${
-            collected ? "text-[#2e4a36]" : "text-[#5d5449]"
+          className={`inline-flex items-center gap-1.5 text-[11px] uppercase tracking-[0.18em] transition-all duration-200 hover:opacity-75 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#8c7b68] focus-visible:ring-offset-2 focus-visible:ring-offset-[#f6f1e8] ${
+            collected ? "font-medium text-[#2e4a36]" : "text-[#5d5449]"
           }`}
         >
-          {collected ? "Wishlisted" : "Add to Wishlist"}
+          <Heart size={13} fill={collected ? "currentColor" : "none"} strokeWidth={2} />
+          <span>{collected ? "Wishlisted" : "Add to Wishlist"}</span>
         </button>
       </div>
 
