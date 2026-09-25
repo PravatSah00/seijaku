@@ -1,6 +1,7 @@
 "use client";
 
-import { createContext, useContext, useEffect, useMemo, useState } from "react";
+import { createContext, useContext, useEffect, useMemo, useState, useCallback, useRef } from "react";
+import { useCustomerAuth } from "@/src/lib/customer-auth";
 
 type ShopStateContextValue = {
   collection: string[];
@@ -9,6 +10,9 @@ type ShopStateContextValue = {
   checkoutSelectedOptions: Record<string, string> | null;
   isCollected: (slug: string) => boolean;
   toggleCollection: (slug: string) => void;
+  addToCollection: (slug: string) => void;
+  removeFromCollection: (slug: string) => void;
+  clearCollection: () => void;
   beginCheckout: (slug: string, selection?: { label?: string | null; options?: Record<string, string> | null }) => void;
   clearCheckout: () => void;
 };
@@ -55,10 +59,55 @@ function readStorageRecord(key: string) {
 }
 
 export function ShopStateProvider({ children }: { children: React.ReactNode }) {
+  const { token, isAuthenticated } = useCustomerAuth();
   const [collection, setCollection] = useState<string[]>(() => readStorageArray(COLLECTION_KEY));
   const [checkoutItemSlug, setCheckoutItemSlug] = useState<string | null>(() => readStorageString(CHECKOUT_KEY));
   const [checkoutVariantLabel, setCheckoutVariantLabel] = useState<string | null>(() => readStorageString(CHECKOUT_VARIANT_KEY));
   const [checkoutSelectedOptions, setCheckoutSelectedOptions] = useState<Record<string, string> | null>(() => readStorageRecord(CHECKOUT_OPTIONS_KEY));
+  const isSyncingRef = useRef(false);
+
+  // Sync wishlist with backend whenever customer logs in or token is active
+  useEffect(() => {
+    if (!token || !isAuthenticated || isSyncingRef.current) return;
+
+    let cancelled = false;
+    isSyncingRef.current = true;
+
+    async function syncBackendWishlist() {
+      try {
+        const localSlugs = readStorageArray(COLLECTION_KEY);
+        const res = await fetch("/api/public/customer/wishlist/sync", {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            Accept: "application/json",
+            Authorization: `Bearer ${token}`,
+          },
+          body: JSON.stringify({ slugs: localSlugs }),
+        });
+
+        if (res.ok && !cancelled) {
+          const data = await res.json();
+          if (Array.isArray(data.slugs)) {
+            setCollection(data.slugs);
+            if (typeof window !== "undefined") {
+              window.localStorage.setItem(COLLECTION_KEY, JSON.stringify(data.slugs));
+            }
+          }
+        }
+      } catch (err) {
+        console.error("Failed to sync customer wishlist", err);
+      } finally {
+        isSyncingRef.current = false;
+      }
+    }
+
+    syncBackendWishlist();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [token, isAuthenticated]);
 
   useEffect(() => {
     if (typeof window === "undefined") {
@@ -107,6 +156,65 @@ export function ShopStateProvider({ children }: { children: React.ReactNode }) {
     window.localStorage.removeItem(CHECKOUT_OPTIONS_KEY);
   }, [checkoutSelectedOptions]);
 
+  const toggleCollection = useCallback(
+    (slug: string) => {
+      const isAlreadyIn = collection.includes(slug);
+      const updated = isAlreadyIn
+        ? collection.filter((entry) => entry !== slug)
+        : [...collection, slug];
+
+      setCollection(updated);
+
+      if (token) {
+        if (isAlreadyIn) {
+          fetch(`/api/public/customer/wishlist/${encodeURIComponent(slug)}`, {
+            method: "DELETE",
+            headers: {
+              Accept: "application/json",
+              Authorization: `Bearer ${token}`,
+            },
+          }).catch((err) => console.error("Wishlist remove error", err));
+        } else {
+          fetch("/api/public/customer/wishlist", {
+            method: "POST",
+            headers: {
+              "Content-Type": "application/json",
+              Accept: "application/json",
+              Authorization: `Bearer ${token}`,
+            },
+            body: JSON.stringify({ productSlug: slug }),
+          }).catch((err) => console.error("Wishlist add error", err));
+        }
+      }
+    },
+    [collection, token]
+  );
+
+  const addToCollection = useCallback(
+    (slug: string) => {
+      if (!collection.includes(slug)) {
+        toggleCollection(slug);
+      }
+    },
+    [collection, toggleCollection]
+  );
+
+  const removeFromCollection = useCallback(
+    (slug: string) => {
+      if (collection.includes(slug)) {
+        toggleCollection(slug);
+      }
+    },
+    [collection, toggleCollection]
+  );
+
+  const clearCollection = useCallback(() => {
+    setCollection([]);
+    if (typeof window !== "undefined") {
+      window.localStorage.removeItem(COLLECTION_KEY);
+    }
+  }, []);
+
   const value = useMemo<ShopStateContextValue>(
     () => ({
       collection,
@@ -114,16 +222,11 @@ export function ShopStateProvider({ children }: { children: React.ReactNode }) {
       checkoutVariantLabel,
       checkoutSelectedOptions,
       isCollected: (slug) => collection.includes(slug),
-      toggleCollection: (slug) => {
-        setCollection((current) =>
-          current.includes(slug) ? current.filter((entry) => entry !== slug) : [...current, slug]
-        );
-      },
+      toggleCollection,
+      addToCollection,
+      removeFromCollection,
+      clearCollection,
       beginCheckout: (slug, selection) => {
-        // Write to localStorage SYNCHRONOUSLY before the React state update so
-        // the value is durable even if the prefetched /checkout route mounts
-        // before our setState commits. The deferred useEffect below would
-        // otherwise miss this race.
         if (typeof window !== "undefined") {
           try {
             window.localStorage.setItem(CHECKOUT_KEY, slug);
@@ -138,8 +241,7 @@ export function ShopStateProvider({ children }: { children: React.ReactNode }) {
               window.localStorage.removeItem(CHECKOUT_OPTIONS_KEY);
             }
           } catch {
-            // Private browsing or storage disabled — fall back to the
-            // in-memory React state path. URL query is the third belt.
+            // Private browsing or storage disabled
           }
         }
         setCheckoutItemSlug(slug);
@@ -152,7 +254,16 @@ export function ShopStateProvider({ children }: { children: React.ReactNode }) {
         setCheckoutSelectedOptions(null);
       },
     }),
-    [checkoutItemSlug, checkoutSelectedOptions, checkoutVariantLabel, collection]
+    [
+      checkoutItemSlug,
+      checkoutSelectedOptions,
+      checkoutVariantLabel,
+      collection,
+      toggleCollection,
+      addToCollection,
+      removeFromCollection,
+      clearCollection,
+    ]
   );
 
   return <ShopStateContext.Provider value={value}>{children}</ShopStateContext.Provider>;

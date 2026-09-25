@@ -23,8 +23,17 @@ function resolveFileName(originalName: string) {
 
 async function storeLocally(fileName: string, buffer: Buffer): Promise<StoredUpload> {
   const uploadDir = path.resolve(process.cwd(), env.LOCAL_UPLOAD_DIR);
-  await fs.mkdir(uploadDir, { recursive: true });
-  await fs.writeFile(path.join(uploadDir, fileName), buffer);
+  const targetPath = path.join(uploadDir, fileName);
+  console.log(`[storage] Storing file locally. Target path: ${targetPath}`);
+
+  try {
+    await fs.mkdir(uploadDir, { recursive: true });
+    await fs.writeFile(targetPath, buffer);
+  } catch (err: any) {
+    console.error(`[storage] Failed to write file to local disk at ${targetPath}:`, err.message);
+    throw err;
+  }
+
   return {
     url: `/uploads/${fileName}`,
   } satisfies StoredUpload;

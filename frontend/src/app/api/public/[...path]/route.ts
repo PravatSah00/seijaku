@@ -8,6 +8,11 @@ async function proxyRequest(request: NextRequest, params: { path?: string[] }) {
   const headers = new Headers();
   headers.set("Accept", "application/json");
 
+  const authHeader = request.headers.get("authorization");
+  if (authHeader) {
+    headers.set("Authorization", authHeader);
+  }
+
   let body: BodyInit | undefined;
   const contentType = request.headers.get("content-type");
 

@@ -6,6 +6,7 @@ import morgan from "morgan";
 
 import { env } from "./config.js";
 import { adminRouter } from "./routes/admin.js";
+import { customerRouter } from "./routes/customer.js";
 import { paymentsRouter } from "./routes/payments.js";
 import { publicRouter } from "./routes/public.js";
 import { errorMiddleware } from "./utils/http.js";
@@ -42,6 +43,8 @@ app.post(
 );
 
 app.use(publicRouter);
+app.use("/customer", customerRouter);
 app.use("/payments", paymentsRouter);
 app.use("/admin", adminRouter);
 app.use(errorMiddleware);
+

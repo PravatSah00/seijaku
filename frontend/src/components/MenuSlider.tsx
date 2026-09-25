@@ -107,8 +107,29 @@ export default function MenuSlider({ isOpen, onClose }: MenuSliderProps) {
               </section>
             ))}
           </div>
+
+          <div className="mt-10 border-t border-[rgba(71,67,60,0.14)] pt-6">
+            <p className="text-[10px] uppercase tracking-[0.28em] text-[rgba(79,73,66,0.8)]">Sanctuary</p>
+            <div className="mt-4 flex flex-col space-y-3">
+              <Link
+                href="/account"
+                onClick={onClose}
+                className="font-serif text-[19px] text-[rgba(28,29,27,0.94)] transition-opacity hover:opacity-70"
+              >
+                My Account
+              </Link>
+              <Link
+                href={canonicalShopRoutes.collection}
+                onClick={onClose}
+                className="font-serif text-[19px] text-[rgba(28,29,27,0.94)] transition-opacity hover:opacity-70"
+              >
+                Saved Wishlist
+              </Link>
+            </div>
+          </div>
         </div>
       </aside>
     </div>
   );
 }
+
