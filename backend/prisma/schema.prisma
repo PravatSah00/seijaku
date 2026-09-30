@@ -19,20 +19,21 @@ model Admin {
 }
 
 model Customer {
-  id                   String                @id @default(cuid())
-  email                String                @unique
-  passwordHash         String?
-  name                 String?
-  phone                String?
-  status               CustomerStatus        @default(ACTIVE)
-  createdAt            DateTime              @default(now())
-  updatedAt            DateTime              @updatedAt
-  orderRequests        OrderRequest[]
-  productNotifications ProductNotification[]
-  programReservations  ProgramReservation[]
-  retreatInquiries     RetreatInquiry[]
-  ritualEntries        RitualEntry[]
-  wishlistItems        WishlistItem[]
+  id                        String                      @id @default(cuid())
+  email                     String                      @unique
+  passwordHash              String?
+  name                      String?
+  phone                     String?
+  status                    CustomerStatus              @default(ACTIVE)
+  createdAt                 DateTime                    @default(now())
+  updatedAt                 DateTime                    @updatedAt
+  orderRequests             OrderRequest[]
+  productNotifications      ProductNotification[]
+  programReservations       ProgramReservation[]
+  retreatInquiries          RetreatInquiry[]
+  ritualEntries             RitualEntry[]
+  wishlistItems             WishlistItem[]
+  CartAbandonedNotification CartAbandonedNotification[]
 }
 
 model MediaAsset {
@@ -541,7 +542,7 @@ model NotificationLog {
   recipient    String
   providerId   String?
   variant      String              @default("")
-  status       NotificationStatus  @default(SENT)
+  status       NotificationStatus  @default(PENDING)
   errorMessage String?
   sentAt       DateTime            @default(now())
 
@@ -582,6 +583,7 @@ enum NotificationType {
 }
 
 enum NotificationStatus {
+  PENDING
   SENT
   DELIVERED
   READ
@@ -589,6 +591,40 @@ enum NotificationStatus {
 }
 
 //////////////////////////////////////////////////////////////////////////////////
+
+// For now we are storing customer in the notifications table.
+// In the future we will have cartId in the table and we will have a relation with the cart table. 
+// For now we are storing customerId in the table and we will have a relation with the customer table.
+model CartAbandonedNotification {
+  id String @id @default(uuid())
+
+  customerId String
+  customer   Customer @relation(fields: [customerId], references: [id], onDelete: Cascade)
+
+  type    AbandonedCartNotificationType
+  status  NotificationStatus            @default(PENDING)
+  channel NotificationChannel
+
+  scheduledAt DateTime
+  sentAt      DateTime?
+
+  attemptCount  Int       @default(0)
+  lastAttemptAt DateTime?
+  errorMessage  String?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([customerId])
+  @@unique([customerId, type])
+  @@index([status, scheduledAt])
+}
+
+enum AbandonedCartNotificationType {
+  REMINDER_1
+  REMINDER_2
+  REMINDER_3
+}
 
 enum AdminRole {
   SUPER_ADMIN

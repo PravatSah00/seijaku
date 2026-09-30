@@ -32,7 +32,7 @@ import {
 } from "../lib/shiprocket.js";
 import { pushOrderToShiprocket } from "../lib/shiprocket-dispatch.js";
 import { asyncHandler, HttpError, parseBody } from "../utils/http.js";
-import { sendOrderConfirmation } from "../lib/notifications/catalog/orderConfirmation.js";
+import { sendOrderConfirmation } from "../lib/notifications/features/orderConfirmation.js";
 
 export const adminRouter = Router();
 

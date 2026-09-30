@@ -32,10 +32,11 @@ const envSchema = z.object({
   // Brevo api key.
   BREVO_API_KEY: z.string().min(1),
   // Brevo template IDs.
-  BREVO_TPL_ORDER_CONFIRMATION: z.coerce.number().min(1),
-  BREVO_TPL_PAYMENT_SUCCESS: z.coerce.number().optional(),
-  BREVO_TPL_PAYMENT_FAILED: z.coerce.number().optional(),
-  BREVO_TPL_SHIPMENT_UPDATE: z.coerce.number().optional(),
+  BREVO_TPL_ORDER_CONFIRMATION: z.coerce.number(),
+  BREVO_TPL_PAYMENT_SUCCESS: z.coerce.number(),
+  BREVO_TPL_PAYMENT_FAILED: z.coerce.number(),
+  BREVO_TPL_SHIPMENT_UPDATE: z.coerce.number(),
+  BREVO_TPL_ABANDONED_CART: z.coerce.number(),
 
 });
 

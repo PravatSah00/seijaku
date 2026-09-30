@@ -3,7 +3,7 @@ import { prisma } from "../lib/prisma.js";
 import { env } from "../config.js";
 import type { ShipmentStatus } from "@prisma/client";
 import { ShipmentStage } from "./email/builders/shipmentStage.js";
-import { sendShipmentUpdate } from "./notifications/catalog/shipmentUpdate.js";
+import { sendShipmentUpdate } from "./notifications/features/shipmentUpdate.js";
 
 // Shiprocket's current_status values
 const STAGE_BY_STATUS: Record<string, ShipmentStage> = {

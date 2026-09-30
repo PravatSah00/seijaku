@@ -55,3 +55,17 @@ export async function sendShipmentUpdateEmail(
         params: params,
     });
 }
+
+/**
+ * Sends an abandoned cart reminder email.
+ */
+export async function sendAbandonedCartEmail(
+    to: { email: string; name: string },
+    params: Record<string, unknown>
+) {
+    return sendTransactional({
+        template: "ABANDONED_CART",
+        to: { email: to.email, name: to.name },
+        params: params,
+    });
+}

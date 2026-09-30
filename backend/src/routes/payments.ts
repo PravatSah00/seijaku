@@ -12,9 +12,9 @@ import {
 import { pushOrderToShiprocket } from "../lib/shiprocket-dispatch.js";
 import { asyncHandler, HttpError, parseBody } from "../utils/http.js";
 import { calculateShippingRate } from "../lib/shiprocket.js";
-import { sendOrderConfirmation } from "../lib/notifications/catalog/orderConfirmation.js";
-import { sendPaymentSuccess } from "../lib/notifications/catalog/paymentSuccess.js";
-import { sendPaymentFailed } from "../lib/notifications/catalog/paymentFailed.js";
+import { sendOrderConfirmation } from "../lib/notifications/features/orderConfirmation.js";
+import { sendPaymentSuccess } from "../lib/notifications/features/paymentSuccess.js";
+import { sendPaymentFailed } from "../lib/notifications/features/paymentFailed.js";
 
 export const paymentsRouter = Router();
 
