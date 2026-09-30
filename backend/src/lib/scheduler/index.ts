@@ -17,7 +17,7 @@ import { env } from '../../config.js';
  */
 export async function processAbandonedWishlist(): Promise<void> {
 
-    const ABANDON_AFTER_HOURS = 2;
+    const ABANDON_AFTER_HOURS = env.ABANDON_AFTER_HOURS;
 
     const cutoff = new Date(
         Date.now() - ABANDON_AFTER_HOURS * 60 * 60 * 1000,

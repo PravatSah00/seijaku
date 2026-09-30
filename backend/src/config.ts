@@ -29,6 +29,8 @@ const envSchema = z.object({
   SHIPROCKET_PASSWORD: z.string().min(1),
   SHIPROCKET_WEBHOOK_SECRET: z.string().min(1),
 
+  ABANDON_AFTER_HOURS: z.coerce.number().default(2),
+
   // Brevo api key.
   BREVO_API_KEY: z.string().min(1),
   // Brevo template IDs.
