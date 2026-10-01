@@ -77,7 +77,7 @@ export default function TextilesPageClient({ page, products }: TextilesPageClien
         <TextilesPageIntro
           eyebrow="TEXTILES IN RITUAL"
           title="Scarves and pocket squares shaped by colour, texture, and quiet ritual"
-          intro="These modal silk textiles carry colour, gesture, and a softened trace of scent."
+          intro="These modal and muslin silk textiles carry colour, gesture, and a softened trace of scent."
           secondaryIntro="Designed for work, travel, gifting, and everyday refinement."
           imageSrc={page.heroImage}
           imageAlt={page.heroImageAlt}
