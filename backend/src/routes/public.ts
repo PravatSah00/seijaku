@@ -8,6 +8,7 @@ import { calculateShippingRate } from "../lib/shiprocket.js";
 import {
   serializeArticle,
   serializeBridgePage,
+  serializeBulkOrderInquiry,
   serializeProduct,
   serializeProductNotification,
   serializeProgram,
@@ -68,6 +69,19 @@ const reservationSchema = z.object({
   partySize: z.number().int().min(1).optional(),
   notes: z.string().optional(),
   sessionId: z.string().optional(),
+});
+
+const bulkOrderInquirySchema = z.object({
+  name: z.string().min(1, "Name is required"),
+  companyName: z.string().optional(),
+  email: z.string().email("Valid email is required"),
+  phone: z.string().min(6, "Phone number is required"),
+  purpose: z.string().optional(),
+  productInterests: z.string().optional(),
+  estimatedQuantity: z.string().optional(),
+  targetDate: z.string().optional(),
+  customizationNotes: z.string().optional(),
+  notes: z.string().optional(),
 });
 
 const shippingCalculationSchema = z.object({
@@ -528,6 +542,30 @@ publicRouter.post(
     });
 
     res.status(201).json({ item: inquiry });
+  })
+);
+
+publicRouter.post(
+  "/lead/bulk-orders",
+  asyncHandler(async (req, res) => {
+    const payload = parseBody(bulkOrderInquirySchema, req.body);
+
+    const inquiry = await prisma.bulkOrderInquiry.create({
+      data: {
+        name: payload.name,
+        companyName: payload.companyName || null,
+        email: payload.email,
+        phone: payload.phone,
+        purpose: payload.purpose || null,
+        productInterests: payload.productInterests || null,
+        estimatedQuantity: payload.estimatedQuantity || null,
+        targetDate: payload.targetDate ? new Date(payload.targetDate) : null,
+        customizationNotes: payload.customizationNotes || null,
+        notes: payload.notes || null,
+      },
+    });
+
+    res.status(201).json({ item: serializeBulkOrderInquiry(inquiry) });
   })
 );
 

@@ -1,10 +1,13 @@
 "use client";
 
 import Image from "next/image";
+import Link from "next/link";
 import { useEffect, useState } from "react";
 import ReactMarkdown from "react-markdown";
+import { Sparkles } from "lucide-react";
 
 import { getShopProductUseCase, hasVariantSelector, type ProductView } from "@/src/lib/product-types";
+import { canonicalShopRoutes } from "@/src/lib/shop-routes";
 
 import ShopProductActions from "./ShopProductActions";
 
@@ -264,6 +267,17 @@ export default function ProductDetailDrawer({ item, isOpen, onClose }: ProductDe
                     options: customizationOptions.length > 0 ? selectedOptions : null,
                   }}
                 />
+              </div>
+
+              <div className="mt-6 border-t border-[#d8cec1]/60 pt-4">
+                <Link
+                  href={canonicalShopRoutes.bulkOrders}
+                  onClick={onClose}
+                  className="inline-flex items-center gap-1.5 text-[12px] font-medium text-[#7a6448] underline decoration-[#7a6448]/30 underline-offset-4 transition hover:text-[#5a4630]"
+                >
+                  <Sparkles size={13} />
+                  <span>Planning for an event or corporate gifting? Inquire in bulk →</span>
+                </Link>
               </div>
             </div>
           </div>

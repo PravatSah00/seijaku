@@ -33,6 +33,7 @@ model Customer {
   retreatInquiries     RetreatInquiry[]
   ritualEntries        RitualEntry[]
   wishlistItems        WishlistItem[]
+  bulkOrderInquiries   BulkOrderInquiry[]
 }
 
 model MediaAsset {
@@ -466,6 +467,28 @@ model RetreatInquiry {
   createdAt  DateTime   @default(now())
   customer   Customer?  @relation(fields: [customerId], references: [id])
   retreat    Retreat    @relation(fields: [retreatId], references: [id])
+}
+
+model BulkOrderInquiry {
+  id                 String     @id @default(cuid())
+  name               String
+  companyName        String?
+  email              String
+  phone              String
+  purpose            String?
+  productInterests   String?
+  estimatedQuantity  String?
+  targetDate         DateTime?
+  customizationNotes String?
+  notes              String?
+  status             LeadStatus @default(NEW)
+  createdAt          DateTime   @default(now())
+  updatedAt          DateTime   @updatedAt
+  customerId         String?
+  customer           Customer?  @relation(fields: [customerId], references: [id])
+
+  @@index([status])
+  @@index([email])
 }
 
 model WishlistItem {

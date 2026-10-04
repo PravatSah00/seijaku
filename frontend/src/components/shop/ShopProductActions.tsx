@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import { useRouter } from "next/navigation";
-import { Heart } from "lucide-react";
+import { Heart, ShoppingBag, Check } from "lucide-react";
 
 import { canonicalShopRoutes } from "@/src/lib/shop-routes";
 import {
@@ -24,6 +24,7 @@ type ShopProductActionsProps = {
   isBuyDisabled?: boolean;
   buyLabel?: string;
   className?: string;
+  showAddToCart?: boolean;
 };
 
 export default function ShopProductActions({
@@ -33,11 +34,13 @@ export default function ShopProductActions({
   isBuyDisabled = false,
   buyLabel = "Buy Now",
   className = "",
+  showAddToCart = true,
 }: ShopProductActionsProps) {
   const router = useRouter();
-  const { beginCheckout, isCollected, toggleCollection } = useShopState();
+  const { beginCheckout, isCollected, toggleCollection, addToCart } = useShopState();
   const collected = isCollected(item.slug);
   const [isNotifyOpen, setIsNotifyOpen] = useState(false);
+  const [addedRecently, setAddedRecently] = useState(false);
 
   const notifyMe = isNotifyMeProduct(item);
   const unbuyable = !notifyMe && isUnbuyableProduct(item);
@@ -50,9 +53,28 @@ export default function ShopProductActions({
     router.push(`${canonicalShopRoutes.checkout}?item=${encodeURIComponent(item.slug)}`);
   };
 
+  const handleAddToCart = () => {
+    addToCart({
+      productSlug: item.slug,
+      title: item.title,
+      unitPrice: item.price,
+      priceLabel: item.priceLabel,
+      image: item.image,
+      shortDescription: item.shortDescription,
+      variantLabel: selection?.label,
+      selectedOptions: selection?.options,
+      weightGrams: item.weightGrams,
+      lengthCm: item.lengthCm,
+      breadthCm: item.breadthCm,
+      heightCm: item.heightCm,
+    });
+    setAddedRecently(true);
+    setTimeout(() => setAddedRecently(false), 2000);
+  };
+
   return (
     <>
-      <div className={`flex flex-wrap items-center gap-x-4 gap-y-3 ${className}`.trim()}>
+      <div className={`flex flex-wrap items-center gap-x-3 gap-y-3 ${className}`.trim()}>
         {notifyMe ? (
           <button
             type="button"
@@ -66,15 +88,39 @@ export default function ShopProductActions({
             {item.status}
           </span>
         ) : (
-          <button
-            type="button"
-            disabled={isBuyDisabled}
-            onClick={handleBuyNow}
-            className="inline-flex min-h-[42px] items-center justify-center rounded-full bg-[#294536] px-5 py-2.5 text-[10px] font-medium uppercase tracking-[0.22em] text-[#f4efe8] transition-colors duration-200 hover:bg-[#21382c] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#8c7b68] focus-visible:ring-offset-2 focus-visible:ring-offset-[#f6f1e8] disabled:cursor-not-allowed disabled:bg-[#a8a095] disabled:text-[#f4efe8]/90"
-          >
-            {buyLabel}
-          </button>
+          <>
+            {showAddToCart && (
+              <button
+                type="button"
+                disabled={isBuyDisabled}
+                onClick={handleAddToCart}
+                className="inline-flex min-h-[42px] items-center justify-center gap-1.5 rounded-full border border-[#294536]/30 bg-white/80 px-4 py-2.5 text-[10px] font-medium uppercase tracking-[0.2em] text-[#294536] transition-all duration-200 hover:bg-[#294536] hover:text-[#f4efe8] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#8c7b68] focus-visible:ring-offset-2 focus-visible:ring-offset-[#f6f1e8] disabled:cursor-not-allowed disabled:opacity-50"
+              >
+                {addedRecently ? (
+                  <>
+                    <Check size={12} strokeWidth={2.5} />
+                    <span>Added to Bag</span>
+                  </>
+                ) : (
+                  <>
+                    <ShoppingBag size={12} />
+                    <span>Add to Bag</span>
+                  </>
+                )}
+              </button>
+            )}
+
+            <button
+              type="button"
+              disabled={isBuyDisabled}
+              onClick={handleBuyNow}
+              className="inline-flex min-h-[42px] items-center justify-center rounded-full bg-[#294536] px-5 py-2.5 text-[10px] font-medium uppercase tracking-[0.22em] text-[#f4efe8] transition-colors duration-200 hover:bg-[#21382c] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#8c7b68] focus-visible:ring-offset-2 focus-visible:ring-offset-[#f6f1e8] disabled:cursor-not-allowed disabled:bg-[#a8a095] disabled:text-[#f4efe8]/90"
+            >
+              {buyLabel}
+            </button>
+          </>
         )}
+
         <button
           type="button"
           onClick={onViewDetails}
@@ -82,6 +128,7 @@ export default function ShopProductActions({
         >
           View Details
         </button>
+
         <button
           type="button"
           onClick={() => toggleCollection(item.slug)}
@@ -90,7 +137,7 @@ export default function ShopProductActions({
           }`}
         >
           <Heart size={13} fill={collected ? "currentColor" : "none"} strokeWidth={2} />
-          <span>{collected ? "Wishlisted" : "Add to Wishlist"}</span>
+          <span>{collected ? "Wishlisted" : "Wishlist"}</span>
         </button>
       </div>
 
