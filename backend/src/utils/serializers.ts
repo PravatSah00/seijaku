@@ -430,3 +430,24 @@ export function serializeCustomer(customer: any) {
   };
 }
 
+export function serializeBulkOrderInquiry(inquiry: any) {
+  return {
+    id: inquiry.id,
+    name: inquiry.name,
+    companyName: inquiry.companyName ?? null,
+    email: inquiry.email,
+    phone: inquiry.phone,
+    purpose: inquiry.purpose ?? null,
+    productInterests: inquiry.productInterests ?? null,
+    estimatedQuantity: inquiry.estimatedQuantity ?? null,
+    targetDate: inquiry.targetDate?.toISOString() ?? null,
+    customizationNotes: inquiry.customizationNotes ?? null,
+    notes: inquiry.notes ?? null,
+    status: inquiry.status,
+    createdAt: inquiry.createdAt.toISOString(),
+    updatedAt: inquiry.updatedAt.toISOString(),
+    customer: inquiry.customer ? serializeCustomer(inquiry.customer) : null,
+  };
+}
+
+

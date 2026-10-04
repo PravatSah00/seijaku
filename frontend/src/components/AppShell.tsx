@@ -5,6 +5,7 @@ import { usePathname } from "next/navigation";
 import Footer from "@/src/components/Footer";
 import Navbar from "@/src/components/Navbar";
 import RouteTransitionObserver from "@/src/components/RouteTransitionObserver";
+import CartDrawer from "@/src/components/shop/CartDrawer";
 
 export default function AppShell({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
@@ -22,6 +23,7 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
         <div className="flex-1">{children}</div>
         <Footer />
       </div>
+      <CartDrawer />
     </>
   );
 }

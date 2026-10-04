@@ -5,6 +5,7 @@ import { useEffect, useState } from "react";
 
 import { canonicalShopRoutes } from "@/src/lib/shop-routes";
 import { drawerSections } from "@/src/lib/navigation";
+import { useShopState } from "./shop/ShopStateProvider";
 
 type MenuSliderProps = {
   isOpen: boolean;
@@ -12,6 +13,7 @@ type MenuSliderProps = {
 };
 
 export default function MenuSlider({ isOpen, onClose }: MenuSliderProps) {
+  const { cartCount, openCart } = useShopState();
   const [openGroups, setOpenGroups] = useState<Record<string, boolean>>({
     Fragrances: true,
     "Gift Sets": true,
@@ -109,8 +111,23 @@ export default function MenuSlider({ isOpen, onClose }: MenuSliderProps) {
           </div>
 
           <div className="mt-10 border-t border-[rgba(71,67,60,0.14)] pt-6">
-            <p className="text-[10px] uppercase tracking-[0.28em] text-[rgba(79,73,66,0.8)]">Sanctuary</p>
+            <p className="text-[10px] uppercase tracking-[0.28em] text-[rgba(79,73,66,0.8)]">Sanctuary & Inquiries</p>
             <div className="mt-4 flex flex-col space-y-3">
+              <button
+                type="button"
+                onClick={() => {
+                  onClose();
+                  openCart();
+                }}
+                className="flex items-center justify-between text-left font-serif text-[19px] text-[rgba(28,29,27,0.94)] transition-opacity hover:opacity-70"
+              >
+                <span>Shopping Bag</span>
+                {cartCount > 0 && (
+                  <span className="rounded-full bg-[#2e4a36] px-2 py-0.5 text-[11px] font-sans font-semibold text-[#f4efe8]">
+                    {cartCount}
+                  </span>
+                )}
+              </button>
               <Link
                 href="/account"
                 onClick={onClose}
@@ -124,6 +141,13 @@ export default function MenuSlider({ isOpen, onClose }: MenuSliderProps) {
                 className="font-serif text-[19px] text-[rgba(28,29,27,0.94)] transition-opacity hover:opacity-70"
               >
                 Saved Wishlist
+              </Link>
+              <Link
+                href={canonicalShopRoutes.bulkOrders}
+                onClick={onClose}
+                className="font-serif text-[19px] text-[#7a6448] transition-opacity hover:opacity-70"
+              >
+                Bulk & Corporate Orders →
               </Link>
             </div>
           </div>

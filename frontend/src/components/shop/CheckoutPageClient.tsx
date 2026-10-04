@@ -1,8 +1,10 @@
 "use client";
 
+import Image from "next/image";
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import { useEffect, useMemo, useState, useTransition } from "react";
+import { ShoppingBag, ArrowLeft, ShieldCheck } from "lucide-react";
 
 import { loadRazorpayCheckout, type RazorpayPaymentResponse } from "@/src/lib/razorpay";
 import { canonicalShopRoutes } from "@/src/lib/shop-routes";
@@ -22,22 +24,43 @@ type CreateOrderResponse = {
   keyId: string;
 };
 
+type CheckoutLineItem = {
+  productSlug: string;
+  title: string;
+  unitPrice: number;
+  priceLabel?: string;
+  quantity: number;
+  image?: string;
+  shortDescription?: string;
+  variantLabel?: string | null;
+  selectedOptions?: Record<string, string> | null;
+  weightGrams?: number | null;
+  lengthCm?: number | null;
+  breadthCm?: number | null;
+  heightCm?: number | null;
+};
+
 export default function CheckoutPageClient() {
   const router = useRouter();
   const searchParams = useSearchParams();
-  const { checkoutItemSlug, checkoutVariantLabel, checkoutSelectedOptions, clearCheckout } = useShopState();
-  // Resolve the active slug in priority order: ?item= URL query (most
-  // reliable across prefetch/navigation races, since URL travels with the
-  // navigation) → in-memory provider state. Buy Now sets both; landing here
-  // from another path (reload, deeplink) hits provider state (which itself
-  // hydrates from localStorage on first mount).
+  const {
+    checkoutItemSlug,
+    checkoutVariantLabel,
+    checkoutSelectedOptions,
+    cart,
+    clearCart,
+    clearCheckout,
+  } = useShopState();
+
   const querySlug = searchParams.get("item");
   const activeSlug = useMemo(
     () => (querySlug && querySlug.length > 0 ? querySlug : checkoutItemSlug),
     [querySlug, checkoutItemSlug],
   );
-  const [item, setItem] = useState<ProductView | null>(null);
+
+  const [singleItem, setSingleItem] = useState<ProductView | null>(null);
   const [isInitialLoading, setIsInitialLoading] = useState<boolean>(Boolean(activeSlug));
+
   const [name, setName] = useState("");
   const [email, setEmail] = useState("");
   const [phone, setPhone] = useState("");
@@ -54,15 +77,10 @@ export default function CheckoutPageClient() {
   const [estimatedDeliveryDays, setEstimatedDeliveryDays] = useState<string | null>(null);
   const [isCalculatingShipping, setIsCalculatingShipping] = useState(false);
 
-  // Calculate total with shipping (GST is included in item.price)
-  const totalWithShipping = shippingCost !== null && item ? item.price + shippingCost : item?.price ?? 0;
-
-  // Resolve the selected slug against the backend. Single attempt; on failure
-  // the component falls through to the empty state (matches the pre-migration
-  // registry-miss branch). Cached in `item` state so rerenders don't refetch.
+  // If a single slug is active (Buy Now), load it from backend
   useEffect(() => {
     if (!activeSlug) {
-      setItem(null);
+      setSingleItem(null);
       setIsInitialLoading(false);
       return;
     }
@@ -74,13 +92,11 @@ export default function CheckoutPageClient() {
           headers: { Accept: "application/json" },
         });
         if (!res.ok) throw new Error(`HTTP ${res.status}`);
-        // Backend returns { item: <product> }; unwrap before normalizing or
-        // normalizeBackendProduct sees missing fields and returns null.
         const body = (await res.json()) as { item: BackendProduct };
         const view = normalizeBackendProduct(body.item);
-        if (!cancelled) setItem(view);
+        if (!cancelled) setSingleItem(view);
       } catch {
-        if (!cancelled) setItem(null);
+        if (!cancelled) setSingleItem(null);
       } finally {
         if (!cancelled) setIsInitialLoading(false);
       }
@@ -90,10 +106,47 @@ export default function CheckoutPageClient() {
     };
   }, [activeSlug]);
 
-  // Calculate shipping when address is complete
+  // Determine line items for checkout (either single item or full cart)
+  const lineItems = useMemo<CheckoutLineItem[]>(() => {
+    if (singleItem) {
+      return [
+        {
+          productSlug: singleItem.slug,
+          title: singleItem.title,
+          unitPrice: singleItem.price,
+          priceLabel: singleItem.priceLabel,
+          quantity: 1,
+          image: singleItem.image,
+          shortDescription: singleItem.shortDescription,
+          variantLabel: checkoutVariantLabel,
+          selectedOptions: checkoutSelectedOptions,
+          weightGrams: singleItem.weightGrams,
+          lengthCm: singleItem.lengthCm,
+          breadthCm: singleItem.breadthCm,
+          heightCm: singleItem.heightCm,
+        },
+      ];
+    }
+    if (cart.length > 0) {
+      return cart;
+    }
+    return [];
+  }, [singleItem, checkoutVariantLabel, checkoutSelectedOptions, cart]);
+
+  const itemsSubtotal = useMemo(
+    () => lineItems.reduce((sum, item) => sum + item.unitPrice * item.quantity, 0),
+    [lineItems]
+  );
+
+  const totalWithShipping = useMemo(
+    () => (shippingCost !== null ? itemsSubtotal + shippingCost : itemsSubtotal),
+    [itemsSubtotal, shippingCost]
+  );
+
+  // Calculate combined shipping when address is complete
   useEffect(() => {
     if (
-      !item ||
+      lineItems.length === 0 ||
       !shippingPincode ||
       shippingPincode.length !== 6 ||
       !shippingCity.trim() ||
@@ -109,16 +162,23 @@ export default function CheckoutPageClient() {
 
     (async () => {
       try {
-        // Use actual product dimensions from item data
+        const totalWeightGrams = lineItems.reduce(
+          (sum, item) => sum + (item.weightGrams ?? 300) * item.quantity,
+          0
+        );
+        const maxLengthCm = Math.max(...lineItems.map((item) => item.lengthCm ?? 15), 15);
+        const maxBreadthCm = Math.max(...lineItems.map((item) => item.breadthCm ?? 10), 10);
+        const maxHeightCm = Math.max(...lineItems.map((item) => item.heightCm ?? 8), 8);
+
         const res = await fetch("/api/public/shipping/calculate", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
             pincode: shippingPincode,
-            weightKg: (item.weightGrams ?? 500) / 1000, // Convert grams to kg
-            lengthCm: item.lengthCm ?? 0,
-            breadthCm: item.breadthCm ?? 0,
-            heightCm: item.heightCm ?? 0,
+            weightKg: Math.max(totalWeightGrams / 1000, 0.1),
+            lengthCm: maxLengthCm,
+            breadthCm: maxBreadthCm,
+            heightCm: maxHeightCm,
           }),
         });
 
@@ -127,14 +187,14 @@ export default function CheckoutPageClient() {
           shippingCost: number;
           estimatedDeliveryDays: string;
         };
-        console.log(data);
+
         if (!cancelled) {
           setShippingCost(data.shippingCost);
           setEstimatedDeliveryDays(data.estimatedDeliveryDays);
         }
       } catch {
         if (!cancelled) {
-          setShippingCost(100); // Default fallback
+          setShippingCost(100);
           setEstimatedDeliveryDays("5-7");
         }
       } finally {
@@ -145,35 +205,46 @@ export default function CheckoutPageClient() {
     return () => {
       cancelled = true;
     };
-  }, [item, shippingPincode, shippingCity, shippingState]);
+  }, [lineItems, shippingPincode, shippingCity, shippingState]);
 
   if (isInitialLoading) {
     return (
       <main className="min-h-screen bg-[#f3efe7] pt-[72px] text-[#3a3a3a] sm:pt-[76px]">
-        {/* <section className="section-primary pt-24 sm:pt-28"> */}
         <div className="page-container max-w-[900px] rounded-[30px] border border-[#d8cec1] mt-24 sm:mt-28 bg-[#faf7f1] px-8 py-12 text-center">
-          <p className="text-[14px] leading-[1.85] text-[#625b53]">Loading your selected product…</p>
+          <p className="text-[14px] leading-[1.85] text-[#625b53]">Loading your order details…</p>
         </div>
-        {/* </section> */}
       </main>
     );
   }
 
-  if (!item) {
+  if (lineItems.length === 0) {
     return (
       <main className="min-h-screen bg-[#f3efe7] pt-[72px] text-[#3a3a3a] sm:pt-[76px]">
         <section className="section-primary pt-24 sm:pt-28">
-          <div className="page-container max-w-[900px] rounded-[30px] border border-[#d8cec1] bg-[#faf7f1] px-8 py-12 text-center">
-            <p className="font-serif text-[34px] leading-[1.12] tracking-[-0.02em] text-[#1f1a16]">No item is ready for checkout yet.</p>
-            <p className="mx-auto mt-4 max-w-[36ch] text-[15px] leading-[1.85] text-[#625b53]">
-              Choose Buy Now from any product card or detail drawer and the selected object will arrive here ready to complete.
+          <div className="page-container max-w-[900px] rounded-[30px] border border-[#d8cec1] bg-[#faf7f1] px-8 py-16 text-center">
+            <div className="mx-auto flex h-16 w-16 items-center justify-center rounded-full bg-[#ebdcd0]/70 text-[#9a785d]">
+              <ShoppingBag size={28} strokeWidth={1.5} />
+            </div>
+            <h1 className="mt-5 font-serif text-[32px] leading-[1.12] tracking-[-0.02em] text-[#1f1a16]">
+              No items are ready for checkout yet.
+            </h1>
+            <p className="mx-auto mt-3 max-w-[38ch] text-[15px] leading-[1.85] text-[#625b53]">
+              Add objects to your shopping bag or choose Buy Now from any product card to arrive here ready to complete.
             </p>
-            <Link
-              href={canonicalShopRoutes.shopAll}
-              className="mt-8 inline-flex items-center justify-center rounded-full bg-[#2e4a36] px-7 py-4 text-[12px] font-medium uppercase tracking-[0.18em] text-[#f4efe8] hover:bg-[#243c2c]"
-            >
-              Browse Shop All
-            </Link>
+            <div className="mt-8 flex flex-wrap items-center justify-center gap-3">
+              <Link
+                href={canonicalShopRoutes.cart}
+                className="inline-flex items-center justify-center rounded-full border border-[#2e4a36]/30 bg-white px-6 py-3 text-[11px] font-medium uppercase tracking-[0.16em] text-[#2e4a36] hover:bg-[#2e4a36] hover:text-[#f4efe8]"
+              >
+                View Shopping Bag
+              </Link>
+              <Link
+                href={canonicalShopRoutes.shopAll}
+                className="inline-flex items-center justify-center rounded-full bg-[#2e4a36] px-7 py-3 text-[11px] font-medium uppercase tracking-[0.18em] text-[#f4efe8] hover:bg-[#243c2c]"
+              >
+                Browse Shop All
+              </Link>
+            </div>
           </div>
         </section>
       </main>
@@ -182,49 +253,116 @@ export default function CheckoutPageClient() {
 
   return (
     <main className="min-h-screen bg-[#f3efe7] pt-[72px] text-[#3a3a3a] sm:pt-[76px]">
-      <section className="section-primary pt-24 sm:pt-28">
+      <section className="section-primary pt-20 sm:pt-24 pb-16">
         <div className="page-container grid gap-8 lg:grid-cols-[1.1fr_0.9fr]">
-          <div className="rounded-[30px] border border-[#d8cec1] bg-[#faf7f1] p-8 sm:p-10">
-            <p className="text-[10px] uppercase tracking-[0.28em] text-[#9a785d]">Checkout</p>
-            <h1 className="mt-5 max-w-[12ch] text-[clamp(38px,4vw,56px)] leading-[1.04] tracking-[-0.025em] text-[#1d1a17]">Complete your Seijaku order.</h1>
-            <p className="mt-5 max-w-[46ch] text-[15px] leading-[1.85] text-[#5f584f]">
-              This route is intentionally minimal: your selected product is held here so the next step feels direct and unambiguous.
-            </p>
-
-            <div className="mt-10 space-y-4 rounded-[24px] bg-[#f2eadf] p-6">
-              <div className="flex items-start justify-between gap-4">
-                <div>
-                  <p className="text-[10px] uppercase tracking-[0.22em] text-[#8f7a65]">Selected product</p>
-                  <p className="mt-2 font-serif text-[30px] leading-[1.1] tracking-[-0.02em] text-[#1f1a16]">{item.title}</p>
-                </div>
-                <p className="text-[16px] text-[#2f2924]">{item.priceLabel}</p>
+          {/* Left Column: Order Items Overview */}
+          <div className="space-y-6">
+            <div className="rounded-[30px] border border-[#d8cec1] bg-[#faf7f1] p-8 sm:p-10">
+              <div className="flex items-center justify-between">
+                <p className="text-[10px] uppercase tracking-[0.28em] text-[#9a785d]">Direct Checkout</p>
+                <Link
+                  href={canonicalShopRoutes.cart}
+                  className="inline-flex items-center gap-1 text-[11px] font-medium uppercase tracking-[0.16em] text-[#7a6448] hover:underline"
+                >
+                  <ArrowLeft size={12} />
+                  <span>Modify Bag</span>
+                </Link>
               </div>
-              <p className="max-w-[40ch] text-[14px] leading-[1.85] text-[#625b53]">{item.shortDescription}</p>
-              {checkoutVariantLabel ? (
-                <div className="rounded-[18px] border border-[rgba(111,100,86,0.12)] bg-[#faf7f1] px-4 py-3">
-                  <p className="text-[10px] uppercase tracking-[0.22em] text-[#8f7a65]">Selected option</p>
-                  <p className="mt-2 text-[14px] leading-[1.7] text-[#4b433b]">{checkoutVariantLabel}</p>
-                </div>
-              ) : null}
+              <h1 className="mt-4 max-w-[14ch] text-[clamp(34px,3.8vw,48px)] leading-[1.06] tracking-[-0.025em] text-[#1d1a17]">
+                Complete your Seijaku order.
+              </h1>
+              <p className="mt-4 max-w-[46ch] text-[14px] leading-[1.8] text-[#5f584f]">
+                {lineItems.length === 1
+                  ? "Your selected object is held here ready for swift, secure completion."
+                  : `Reviewing ${lineItems.length} items from your shopping bag.`}
+              </p>
+
+              {/* Line Items List */}
+              <div className="mt-8 space-y-4">
+                {lineItems.map((line) => (
+                  <div
+                    key={line.productSlug + (line.variantLabel || "")}
+                    className="flex gap-4 rounded-[20px] bg-[#f2eadf] p-4 sm:p-5"
+                  >
+                    {line.image ? (
+                      <div className="relative h-16 w-16 flex-shrink-0 overflow-hidden rounded-xl bg-white/60">
+                        <Image
+                          src={line.image}
+                          alt={line.title}
+                          fill
+                          className="object-cover"
+                          sizes="64px"
+                        />
+                      </div>
+                    ) : null}
+
+                    <div className="flex-1">
+                      <div className="flex items-start justify-between gap-2">
+                        <div>
+                          <p className="font-serif text-[18px] leading-[1.2] text-[#1f1a16]">
+                            {line.title}
+                          </p>
+                          {line.quantity > 1 && (
+                            <span className="text-[12px] font-medium text-[#7a6448]">
+                              Qty: {line.quantity}
+                            </span>
+                          )}
+                        </div>
+                        <p className="text-[15px] font-semibold text-[#2f2924]">
+                          INR {(line.unitPrice * line.quantity).toLocaleString("en-IN")}
+                        </p>
+                      </div>
+
+                      {line.variantLabel && (
+                        <p className="mt-1 text-[12px] text-[#655b4f]">
+                          Option: {line.variantLabel}
+                        </p>
+                      )}
+
+                      {line.selectedOptions && Object.keys(line.selectedOptions).length > 0 && (
+                        <div className="mt-1 flex flex-wrap gap-1">
+                          {Object.entries(line.selectedOptions).map(([k, v]) => (
+                            <span
+                              key={k}
+                              className="rounded bg-[#faf7f1] px-1.5 py-0.5 text-[10px] text-[#554a3e]"
+                            >
+                              {k}: {v}
+                            </span>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+
+            {/* Assurance Box */}
+            <div className="rounded-[24px] border border-[#d8cec1] bg-[#faf7f1] p-6 text-[13px] text-[#635b51]">
+              <div className="flex items-center gap-2.5 font-medium text-[#1d1a17]">
+                <ShieldCheck size={16} className="text-[#2e4a36]" />
+                <span>Secure Checkout Assurance</span>
+              </div>
+              <p className="mt-2 text-[12px] leading-[1.7]">
+                Every Seijaku formulation and handcrafted object is insured during transit and dispatched directly from our studio in Kolkata, India.
+              </p>
             </div>
           </div>
 
+          {/* Right Column: Address, Summary & Razorpay */}
           <div className="rounded-[30px] border border-[#d8cec1] bg-[#eae3d8] p-8 sm:p-10">
-            <p className="text-[10px] uppercase tracking-[0.28em] text-[#8d7d6d]">Order summary</p>
+            <p className="text-[10px] uppercase tracking-[0.28em] text-[#8d7d6d]">Order Summary</p>
             <div className="mt-6 space-y-4 text-[14px] leading-[1.8] text-[#5d554b]">
               <div className="flex items-center justify-between gap-4">
-                <span>Product</span>
+                <span>Items Subtotal</span>
                 <div className="text-right">
-                  <div>{item.priceLabel}</div>
+                  <div className="font-semibold text-[#1d1a17]">
+                    INR {itemsSubtotal.toLocaleString("en-IN")}
+                  </div>
                   <div className="text-[12px] text-[#8d7d6d]">Included GST</div>
                 </div>
               </div>
-              {checkoutVariantLabel ? (
-                <div className="flex items-start justify-between gap-4">
-                  <span>Variant</span>
-                  <span className="max-w-[16rem] text-right">{checkoutVariantLabel}</span>
-                </div>
-              ) : null}
+
               <div className="flex items-center justify-between gap-4">
                 <span>Shipping Charges</span>
                 <span>
@@ -236,56 +374,59 @@ export default function CheckoutPageClient() {
                       <div className="text-[12px] text-[#8d7d6d]">Est. {estimatedDeliveryDays} days</div>
                     </div>
                   ) : (
-                    "Enter address to calculate"
+                    <span className="text-[13px] text-[#8d7d6d]">Enter address to calculate</span>
                   )}
                 </span>
               </div>
+
               <div className="h-px bg-black/8" />
-              <div className="flex items-center justify-between gap-4 text-[16px] text-[#1f1a16]">
-                <span>Total</span>
+
+              <div className="flex items-center justify-between gap-4 text-[17px] font-semibold text-[#1f1a16]">
+                <span>Total Amount</span>
                 <span>INR {totalWithShipping.toLocaleString("en-IN")}</span>
               </div>
             </div>
 
+            {/* Customer & Address Form */}
             <div className="mt-8 space-y-4">
-              <div className="grid gap-4">
+              <div className="grid gap-3.5">
                 <input
                   type="text"
-                  placeholder="Your name"
+                  placeholder="Your full name"
                   value={name}
                   onChange={(event) => setName(event.target.value)}
                   className="w-full rounded-[18px] border border-[#cfc3b4] bg-[#faf7f1] px-4 py-3 text-[14px] text-[#2f2924] outline-none focus:border-[#2e4a36] focus:ring-2 focus:ring-[#2e4a36]/15"
                 />
                 <input
                   type="email"
-                  placeholder="Your email"
+                  placeholder="Your email address"
                   value={email}
                   onChange={(event) => setEmail(event.target.value)}
                   className="w-full rounded-[18px] border border-[#cfc3b4] bg-[#faf7f1] px-4 py-3 text-[14px] text-[#2f2924] outline-none focus:border-[#2e4a36] focus:ring-2 focus:ring-[#2e4a36]/15"
                 />
                 <input
                   type="tel"
-                  placeholder="Phone number"
+                  placeholder="Phone number (+91...)"
                   value={phone}
                   onChange={(event) => setPhone(event.target.value)}
                   className="w-full rounded-[18px] border border-[#cfc3b4] bg-[#faf7f1] px-4 py-3 text-[14px] text-[#2f2924] outline-none focus:border-[#2e4a36] focus:ring-2 focus:ring-[#2e4a36]/15"
                 />
-                <p className="mt-2 text-[10px] uppercase tracking-[0.22em] text-[#8d7d6d]">Shipping address</p>
+                <p className="mt-2 text-[10px] uppercase tracking-[0.22em] text-[#8d7d6d]">Shipping Address</p>
                 <input
                   type="text"
-                  placeholder="Address line 1"
+                  placeholder="Address line 1 (Flat, House, Street)"
                   value={shippingLine1}
                   onChange={(event) => setShippingLine1(event.target.value)}
                   className="w-full rounded-[18px] border border-[#cfc3b4] bg-[#faf7f1] px-4 py-3 text-[14px] text-[#2f2924] outline-none focus:border-[#2e4a36] focus:ring-2 focus:ring-[#2e4a36]/15"
                 />
                 <input
                   type="text"
-                  placeholder="Address line 2 (optional)"
+                  placeholder="Address line 2 (Landmark, Area - optional)"
                   value={shippingLine2}
                   onChange={(event) => setShippingLine2(event.target.value)}
                   className="w-full rounded-[18px] border border-[#cfc3b4] bg-[#faf7f1] px-4 py-3 text-[14px] text-[#2f2924] outline-none focus:border-[#2e4a36] focus:ring-2 focus:ring-[#2e4a36]/15"
                 />
-                <div className="grid gap-4 sm:grid-cols-2">
+                <div className="grid gap-3.5 sm:grid-cols-2">
                   <input
                     type="text"
                     placeholder="City"
@@ -301,7 +442,7 @@ export default function CheckoutPageClient() {
                     className="w-full rounded-[18px] border border-[#cfc3b4] bg-[#faf7f1] px-4 py-3 text-[14px] text-[#2f2924] outline-none focus:border-[#2e4a36] focus:ring-2 focus:ring-[#2e4a36]/15"
                   />
                 </div>
-                <div className="grid gap-4 sm:grid-cols-2">
+                <div className="grid gap-3.5 sm:grid-cols-2">
                   <input
                     type="text"
                     inputMode="numeric"
@@ -320,8 +461,8 @@ export default function CheckoutPageClient() {
                   />
                 </div>
                 <textarea
-                  rows={4}
-                  placeholder="Anything we should know before we contact you?"
+                  rows={3}
+                  placeholder="Notes or special delivery instructions (optional)..."
                   value={notes}
                   onChange={(event) => setNotes(event.target.value)}
                   className="w-full rounded-[18px] border border-[#cfc3b4] bg-[#faf7f1] px-4 py-3 text-[14px] leading-[1.8] text-[#2f2924] outline-none focus:border-[#2e4a36] focus:ring-2 focus:ring-[#2e4a36]/15"
@@ -339,9 +480,6 @@ export default function CheckoutPageClient() {
                     setNotice(null);
                     setError(null);
 
-                    // Client-side validation. Server-side Zod still
-                    // enforces the same rules — this is for fast UX
-                    // feedback before we open Razorpay.
                     if (!name.trim() || !email.trim() || !phone.trim()) {
                       setError("Please fill in your name, email, and phone.");
                       return;
@@ -377,14 +515,12 @@ export default function CheckoutPageClient() {
                           shippingState,
                           shippingPincode,
                           shippingCountry: "IN",
-                          items: [
-                            {
-                              productSlug: item.slug,
-                              quantity: 1,
-                              selectedOptions: checkoutSelectedOptions ?? undefined,
-                              variantSummary: checkoutVariantLabel ?? undefined,
-                            },
-                          ],
+                          items: lineItems.map((item) => ({
+                            productSlug: item.productSlug,
+                            quantity: item.quantity,
+                            selectedOptions: item.selectedOptions ?? undefined,
+                            variantSummary: item.variantLabel ?? undefined,
+                          })),
                         }),
                       });
                     } catch {
@@ -399,7 +535,7 @@ export default function CheckoutPageClient() {
                     }
                     const order = (await orderRes.json()) as CreateOrderResponse;
 
-                    // 2. Load Razorpay Checkout SDK (10s timeout, single shot).
+                    // 2. Load Razorpay Checkout SDK.
                     let Razorpay;
                     try {
                       Razorpay = await loadRazorpayCheckout();
@@ -408,14 +544,14 @@ export default function CheckoutPageClient() {
                       return;
                     }
 
-                    // 3. Open Razorpay Checkout. handler() runs after a successful charge.
+                    // 3. Open Razorpay Checkout.
                     const rzp = new Razorpay({
                       key: order.keyId,
                       order_id: order.razorpayOrderId,
                       amount: order.amount,
                       currency: order.currency,
                       name: "Seijaku",
-                      description: item.title,
+                      description: lineItems.length === 1 ? lineItems[0].title : `Seijaku Order (${lineItems.length} items)`,
                       prefill: { name, email, contact: phone },
                       theme: { color: "#2e4a36" },
                       handler: async (response: RazorpayPaymentResponse) => {
@@ -427,6 +563,7 @@ export default function CheckoutPageClient() {
                           });
                           if (verifyRes.ok) {
                             clearCheckout();
+                            clearCart();
                             setName("");
                             setEmail("");
                             setPhone("");
@@ -449,8 +586,6 @@ export default function CheckoutPageClient() {
                         }
                       },
                       modal: {
-                        // User dismissed without paying — no row update needed; the
-                        // OrderRequest stays at paymentStatus = CREATED.
                         ondismiss: () => undefined,
                       },
                     });
@@ -459,7 +594,7 @@ export default function CheckoutPageClient() {
                 }}
                 className="inline-flex w-full items-center justify-center rounded-full bg-[#2e4a36] px-7 py-4 text-[12px] font-medium uppercase tracking-[0.18em] text-[#f4efe8] hover:bg-[#243c2c] disabled:cursor-not-allowed disabled:bg-[#a8a095]"
               >
-                {isPending ? "Opening Payment" : "Pay Now"}
+                {isPending ? "Opening Payment" : `Pay Now • INR ${totalWithShipping.toLocaleString("en-IN")}`}
               </button>
               <p className="text-[12px] leading-[1.8] text-[#6c6257]">
                 Secure checkout via Razorpay. You'll be charged once payment is confirmed.

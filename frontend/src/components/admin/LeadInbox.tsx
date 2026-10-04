@@ -52,12 +52,29 @@ type OrderRequestItem = {
   shipmentError?: string | null;
 };
 
+type BulkOrderInquiryItem = {
+  id: string;
+  name: string;
+  companyName?: string | null;
+  email: string;
+  phone: string;
+  purpose?: string | null;
+  productInterests?: string | null;
+  estimatedQuantity?: string | null;
+  targetDate?: string | null;
+  customizationNotes?: string | null;
+  notes?: string | null;
+  status: LeadStatus;
+  createdAt?: string;
+};
+
 type LeadInboxProps = {
   orderRequests: OrderRequestItem[];
   newsletterSubscriptions: Array<{ id: string; email: string; source?: string | null; status?: string; subscribedAt?: string }>;
   programReservations: Array<{ id: string; name: string; email: string; phone?: string | null; notes?: string | null; status: LeadStatus; program: { name: string } }>;
   retreatInquiries: Array<{ id: string; name: string; email: string; phone?: string | null; notes?: string | null; status: LeadStatus; retreat: { name: string } }>;
   productNotifications: ProductNotificationItem[];
+  bulkOrderInquiries: BulkOrderInquiryItem[];
 };
 
 const PAYMENT_BADGE_COLORS: Record<PaymentStatus, string> = {
@@ -185,14 +202,16 @@ export default function LeadInbox({
   programReservations,
   retreatInquiries,
   productNotifications,
+  bulkOrderInquiries,
 }: LeadInboxProps) {
-  const [activeTab, setActiveTab] = useState<"orders" | "newsletter" | "programs" | "retreats" | "notify-me">("orders");
+  const [activeTab, setActiveTab] = useState<"orders" | "bulk-orders" | "newsletter" | "programs" | "retreats" | "notify-me">("orders");
 
   return (
     <div className="space-y-6">
       <div className="flex flex-wrap gap-3">
         {[
           { key: "orders", label: `Order Requests (${orderRequests.length})` },
+          { key: "bulk-orders", label: `Bulk & Corporate (${bulkOrderInquiries.length})` },
           { key: "newsletter", label: `Newsletter (${newsletterSubscriptions.length})` },
           { key: "programs", label: `Program Reservations (${programReservations.length})` },
           { key: "retreats", label: `Retreat Inquiries (${retreatInquiries.length})` },
@@ -219,6 +238,9 @@ export default function LeadInbox({
           renderExtra={(item) => item.items?.map((entry) => entry.product?.title).filter(Boolean).join(", ")}
           renderPayment={renderOrderPayment}
         />
+      ) : null}
+      {activeTab === "bulk-orders" ? (
+        <BulkOrderInquiryList items={bulkOrderInquiries} />
       ) : null}
       {activeTab === "newsletter" ? (
         <AdminCard>
@@ -402,3 +424,131 @@ function LeadStatusList<T extends { id: string; name: string; email: string; pho
     </AdminCard>
   );
 }
+
+function BulkOrderInquiryList({ items }: { items: BulkOrderInquiryItem[] }) {
+  const router = useRouter();
+  const [notice, setNotice] = useState<string | null>(null);
+  const [error, setError] = useState<string | null>(null);
+  const [isPending, startTransition] = useTransition();
+
+  return (
+    <AdminCard>
+      <h2 className="text-[24px]">Bulk & Corporate Inquiries</h2>
+      {notice ? <p className="mt-5 rounded-2xl border border-[#cde0d2] bg-[#eef8f0] px-4 py-3 text-[14px] text-[#2c6541]">{notice}</p> : null}
+      {error ? <p className="mt-5 rounded-2xl border border-[#e7c1ba] bg-[#fff1ee] px-4 py-3 text-[14px] text-[#9f4332]">{error}</p> : null}
+
+      {items.length === 0 ? (
+        <p className="mt-6 rounded-2xl border border-[#e2d7c7] bg-white px-4 py-6 text-[14px] text-[#6c6157]">No bulk order inquiries yet.</p>
+      ) : (
+        <div className="mt-6 space-y-4">
+          {items.map((item) => (
+            <div key={item.id} className="rounded-2xl border border-[#e2d7c7] bg-white px-5 py-5">
+              <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
+                <div className="space-y-2">
+                  <div className="flex flex-wrap items-center gap-3">
+                    <p className="text-[17px] font-semibold text-[#1f1a16]">{item.name}</p>
+                    {item.companyName ? (
+                      <span className="rounded-full bg-[#f2ede4] px-3 py-1 text-[11px] font-medium uppercase tracking-[0.16em] text-[#7a6a58]">
+                        {item.companyName}
+                      </span>
+                    ) : null}
+                    <AdminStatusBadge value={item.status} />
+                  </div>
+
+                  <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-[13px] text-[#6c6157]">
+                    <span>{item.email}</span>
+                    <span>•</span>
+                    <span>{item.phone}</span>
+                    {item.createdAt ? (
+                      <>
+                        <span>•</span>
+                        <span className="text-[12px] text-[#96897b]">
+                          {new Date(item.createdAt).toLocaleDateString("en-IN", {
+                            day: "numeric",
+                            month: "short",
+                            year: "numeric",
+                          })}
+                        </span>
+                      </>
+                    ) : null}
+                  </div>
+
+                  <div className="mt-3 flex flex-wrap gap-2 text-[12px]">
+                    {item.purpose ? (
+                      <span className="rounded-lg border border-[#e4dacf] bg-[#faf6f0] px-2.5 py-1 text-[#4f4337]">
+                        <strong>Purpose:</strong> {item.purpose}
+                      </span>
+                    ) : null}
+                    {item.estimatedQuantity ? (
+                      <span className="rounded-lg border border-[#e4dacf] bg-[#faf6f0] px-2.5 py-1 text-[#4f4337]">
+                        <strong>Quantity:</strong> {item.estimatedQuantity}
+                      </span>
+                    ) : null}
+                    {item.targetDate ? (
+                      <span className="rounded-lg border border-[#e4dacf] bg-[#faf6f0] px-2.5 py-1 text-[#4f4337]">
+                        <strong>Target Date:</strong> {new Date(item.targetDate).toLocaleDateString("en-IN")}
+                      </span>
+                    ) : null}
+                  </div>
+
+                  {item.productInterests ? (
+                    <p className="text-[13px] text-[#554a3e]">
+                      <strong>Products of interest:</strong> {item.productInterests}
+                    </p>
+                  ) : null}
+
+                  {item.customizationNotes ? (
+                    <p className="text-[13px] text-[#554a3e]">
+                      <strong>Customization:</strong> {item.customizationNotes}
+                    </p>
+                  ) : null}
+
+                  {item.notes ? (
+                    <div className="mt-2 rounded-xl bg-[#f8f5ee] p-3 text-[13px] leading-[1.7] text-[#5b5247]">
+                      <span className="font-medium text-[#3b342e]">Message:</span> {item.notes}
+                    </div>
+                  ) : null}
+                </div>
+
+                <div className="flex flex-wrap gap-2 pt-2 lg:pt-0">
+                  {leadStatuses.map((status) => (
+                    <button
+                      key={status}
+                      type="button"
+                      disabled={isPending || status === item.status}
+                      className={`${adminButtonClassName} ${status === item.status ? "opacity-100" : "bg-[#f0e6d8] text-[#3a3129] hover:bg-[#e8dac7]"}`}
+                      onClick={() => {
+                        startTransition(async () => {
+                          setNotice(null);
+                          setError(null);
+                          const response = await fetch(`/api/admin/proxy/lead/bulk-orders/${item.id}`, {
+                            method: "PATCH",
+                            headers: { "Content-Type": "application/json" },
+                            body: JSON.stringify({ status }),
+                          });
+
+                          const data = (await response.json().catch(() => null)) as { error?: string } | null;
+
+                          if (!response.ok) {
+                            setError(data?.error ?? "Unable to update status.");
+                            return;
+                          }
+
+                          setNotice("Bulk order status updated.");
+                          router.refresh();
+                        });
+                      }}
+                    >
+                      {status.replaceAll("_", " ")}
+                    </button>
+                  ))}
+                </div>
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
+    </AdminCard>
+  );
+}
+
