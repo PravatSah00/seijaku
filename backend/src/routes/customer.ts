@@ -7,6 +7,7 @@ import { prisma } from "../lib/prisma.js";
 import { requireCustomer } from "../middleware/requireCustomer.js";
 import { asyncHandler, HttpError, parseBody } from "../utils/http.js";
 import { serializeCustomer, serializeProduct } from "../utils/serializers.js";
+import { syncUserToBrevo } from "../lib/brevo-contact.js";
 
 export const customerRouter = Router();
 
@@ -72,21 +73,32 @@ customerRouter.post(
 
     const customer = existing
       ? await prisma.customer.update({
-          where: { id: existing.id },
-          data: {
-            passwordHash,
-            name: input.name?.trim() || existing.name,
-            phone: input.phone?.trim() || existing.phone,
-          },
-        })
+        where: { id: existing.id },
+        data: {
+          passwordHash,
+          name: input.name?.trim() || existing.name,
+          phone: input.phone?.trim() || existing.phone,
+        },
+      })
       : await prisma.customer.create({
-          data: {
-            email: normalizedEmail,
-            passwordHash,
-            name: input.name?.trim() || null,
-            phone: input.phone?.trim() || null,
-          },
-        });
+        data: {
+          email: normalizedEmail,
+          passwordHash,
+          name: input.name?.trim() || null,
+          phone: input.phone?.trim() || null,
+        },
+      });
+
+    try {
+      await syncUserToBrevo({
+        id       : customer.id,
+        email    : customer.email,
+        firstName: customer.name || "",
+        phone    : customer.phone || "",
+      });
+    } catch (error) {
+      console.error("Brevo sync failed:", error);
+    }
 
     const token = signCustomerToken({
       customerId: customer.id,
