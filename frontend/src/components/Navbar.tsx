@@ -17,7 +17,7 @@ import SearchOverlay from "./SearchOverlay";
 export default function Navbar() {
   const pathname = usePathname();
   const { customer, isAuthenticated, logout } = useCustomerAuth();
-  const { collection } = useShopState();
+  const { collection, cartCount, openCart } = useShopState();
   const [isMenuOpen, setIsMenuOpen] = useState(false);
   const [isSearchOpen, setIsSearchOpen] = useState(false);
   const [isUserMenuOpen, setIsUserMenuOpen] = useState(false);
@@ -173,13 +173,20 @@ export default function Navbar() {
                 )}
               </div>
 
-              <Link
-                href={canonicalShopRoutes.collection}
-                aria-label="Open collection"
-                className="inline-flex opacity-90 transition-opacity duration-200 hover:opacity-100"
+              {/* Shopping Bag Button with Live Cart Drawer & Badge */}
+              <button
+                type="button"
+                onClick={openCart}
+                aria-label="Open shopping cart"
+                className="relative inline-flex opacity-90 transition-opacity duration-200 hover:opacity-100"
               >
                 <ShoppingBag size={18} strokeWidth={1.9} className="sm:h-5 sm:w-5" />
-              </Link>
+                {cartCount > 0 && (
+                  <span className="absolute -right-1.5 -top-1.5 flex h-4 min-w-4 items-center justify-center rounded-full bg-[#2e4a36] px-1 text-[9px] font-bold text-[#fcfaf6] shadow-sm">
+                    {cartCount}
+                  </span>
+                )}
+              </button>
             </div>
           </div>
         </div>

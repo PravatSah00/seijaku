@@ -13,5 +13,7 @@ export const canonicalShopRoutes = {
   dokraOrnaments: "/shop/dokra-ornaments",
   seasonaldrops: "/shop/seasonaldrops",
   checkout: "/checkout",
+  cart: "/cart",
+  bulkOrders: "/bulk-orders",
   collection: "/collection",
 } as const;

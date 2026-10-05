@@ -13,6 +13,7 @@ import {
   serializeAdmin,
   serializeArticle,
   serializeBridgePage,
+  serializeBulkOrderInquiry,
   serializeCategory,
   serializeCollection,
   serializeMediaAsset,
@@ -2032,6 +2033,30 @@ adminRouter.patch(
       include: { product: { select: { id: true, slug: true, title: true, status: true } } },
     });
     res.json({ item: serializeProductNotification(item) });
+  })
+);
+
+adminRouter.get(
+  "/lead/bulk-orders",
+  asyncHandler(async (_req, res) => {
+    const items = await prisma.bulkOrderInquiry.findMany({
+      include: { customer: true },
+      orderBy: { createdAt: "desc" },
+    });
+    res.json({ items: items.map(serializeBulkOrderInquiry) });
+  })
+);
+
+adminRouter.patch(
+  "/lead/bulk-orders/:id",
+  asyncHandler(async (req, res) => {
+    const payload = parseBody(leadStatusSchema, req.body);
+    const item = await prisma.bulkOrderInquiry.update({
+      where: { id: routeParam(req, "id") },
+      data: { status: payload.status },
+      include: { customer: true },
+    });
+    res.json({ item: serializeBulkOrderInquiry(item) });
   })
 );
 

@@ -10,7 +10,8 @@ const exploreLinks = [
   { label: "Scarves & Squares", href: canonicalShopRoutes.scarvesAndSquares },
   { label: "Diffusers", href: canonicalShopRoutes.diffusers },
   { label: "Dokra Ornaments", href: canonicalShopRoutes.dokraOrnaments },
-  { label: "Collection", href: canonicalShopRoutes.collection },
+  { label: "Shopping Bag", href: canonicalShopRoutes.cart },
+  { label: "Saved Wishlist", href: canonicalShopRoutes.collection },
 ];
 
 const journalLinks = [
@@ -21,6 +22,7 @@ const journalLinks = [
 ];
 
 const infoLinks = [
+  { label: "Bulk & Corporate Orders", href: canonicalShopRoutes.bulkOrders },
   { label: "Terms & Conditions", href: "/terms-and-agreements" },
   { label: "Shipping, Returns & Exchanges", href: "/shipping-and-delivery" },
   { label: "Privacy Policy", href: "/privacy-policy" },

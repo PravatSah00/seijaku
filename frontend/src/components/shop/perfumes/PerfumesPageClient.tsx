@@ -21,7 +21,7 @@ type PerfumeSectionId = "skin" | "textiles" | "objects" | "other";
 
 const sectionLinks: { id: PerfumeSectionId; label: string }[] = [
   { id: "skin", label: "Skin" },
-  { id: "textiles", label: "Textiles" },
+  { id: "textiles", label: "Skin and Textiles" },
   { id: "objects", label: "Objects" },
 ];
 

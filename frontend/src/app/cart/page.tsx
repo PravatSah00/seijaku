@@ -1,7 +1,12 @@
-import { redirect } from "next/navigation";
+import { Suspense } from "react";
+import CartPageClient from "@/src/components/shop/CartPageClient";
 
-import { canonicalShopRoutes } from "@/src/lib/shop-routes";
+export const dynamic = "force-dynamic";
 
 export default function CartPage() {
-  redirect(canonicalShopRoutes.collection);
+  return (
+    <Suspense fallback={null}>
+      <CartPageClient />
+    </Suspense>
+  );
 }
