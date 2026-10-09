@@ -450,4 +450,27 @@ export function serializeBulkOrderInquiry(inquiry: any) {
   };
 }
 
-
+export function serializeCartItem(cartItem: any) {
+  const product = cartItem.product;
+  const primaryImage = product?.primaryImage?.url || null;
+  return {
+    id: cartItem.cartKey || cartItem.id,
+    cartItemId: cartItem.id,
+    cartKey: cartItem.cartKey,
+    productSlug: product?.slug ?? "",
+    title: product?.title ?? "",
+    unitPrice: product?.priceAmount ?? 0,
+    priceLabel: product?.priceAmount !== undefined ? `₹${product.priceAmount.toLocaleString("en-IN")}` : undefined,
+    quantity: cartItem.quantity,
+    image: primaryImage,
+    shortDescription: product?.shortDescription ?? null,
+    variantLabel: cartItem.variantLabel ?? null,
+    selectedOptions: (cartItem.selectedOptions as Record<string, string>) ?? null,
+    weightGrams: product?.weightGrams ?? null,
+    lengthCm: product?.lengthCm ?? null,
+    breadthCm: product?.breadthCm ?? null,
+    heightCm: product?.heightCm ?? null,
+    createdAt: cartItem.createdAt?.toISOString() ?? new Date().toISOString(),
+    updatedAt: cartItem.updatedAt?.toISOString() ?? new Date().toISOString(),
+  };
+}
