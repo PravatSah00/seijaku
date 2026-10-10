@@ -6,8 +6,8 @@ import { hashPassword, signCustomerToken, verifyPassword } from "../lib/auth.js"
 import { prisma } from "../lib/prisma.js";
 import { requireCustomer } from "../middleware/requireCustomer.js";
 import { asyncHandler, HttpError, parseBody } from "../utils/http.js";
-import { serializeCustomer, serializeProduct } from "../utils/serializers.js";
 import { syncUserToBrevo } from "../lib/brevo-contact.js";
+import { serializeCartItem, serializeCustomer, serializeProduct } from "../utils/serializers.js";
 
 export const customerRouter = Router();
 
@@ -18,6 +18,34 @@ const productInclude = {
   collections: { include: { collection: true } },
   categories: { include: { category: true } },
 } satisfies Prisma.ProductInclude;
+
+function generateCartKey(productSlug: string, variantLabel?: string | null, options?: Record<string, string> | null) {
+  const optionsKey = options ? Object.entries(options).sort().map(([k, v]) => `${k}:${v}`).join("|") : "";
+  return `${productSlug}__${variantLabel || "default"}__${optionsKey}`;
+}
+
+async function getCustomerCart(customerId: string) {
+  const items = await prisma.cartItem.findMany({
+    where: { customerId },
+    include: {
+      product: {
+        include: productInclude,
+      },
+    },
+    orderBy: { createdAt: "asc" },
+  });
+
+  const validItems = items.filter((item) => item.product.workflowStatus === "PUBLISHED");
+  const serialized = validItems.map(serializeCartItem);
+  const count = serialized.reduce((sum, item) => sum + item.quantity, 0);
+  const subtotal = serialized.reduce((sum, item) => sum + item.unitPrice * item.quantity, 0);
+
+  return {
+    cart: serialized,
+    count,
+    subtotal,
+  };
+}
 
 const registerSchema = z.object({
   email: z.string().email("Invalid email format").max(254),
@@ -47,6 +75,29 @@ const wishlistAddSchema = z.object({
 
 const wishlistSyncSchema = z.object({
   slugs: z.array(z.string()),
+});
+
+const cartItemAddSchema = z.object({
+  productSlug: z.string().min(1, "Product slug is required"),
+  quantity: z.number().int().min(1).default(1),
+  variantLabel: z.string().nullable().optional(),
+  selectedOptions: z.record(z.string()).nullable().optional(),
+});
+
+const cartItemUpdateSchema = z.object({
+  cartKey: z.string().min(1, "Cart key is required"),
+  quantity: z.number().int().min(0),
+});
+
+const cartSyncSchema = z.object({
+  items: z.array(
+    z.object({
+      productSlug: z.string().min(1),
+      quantity: z.number().int().min(1).default(1),
+      variantLabel: z.string().nullable().optional(),
+      selectedOptions: z.record(z.string()).nullable().optional(),
+    })
+  ),
 });
 
 function routeParam(req: { params: Record<string, string | string[] | undefined> }, key: string) {
@@ -109,6 +160,9 @@ customerRouter.post(
       token,
       customer: serializeCustomer(customer),
       wishlist: [],
+      cart: [],
+      cartCount: 0,
+      cartSubtotal: 0,
     });
   })
 );
@@ -152,11 +206,15 @@ customerRouter.post(
     });
 
     const wishlistSlugs = customer.wishlistItems.map((item) => item.product.slug);
+    const cartData = await getCustomerCart(customer.id);
 
     res.json({
       token,
       customer: serializeCustomer(customer),
       wishlist: wishlistSlugs,
+      cart: cartData.cart,
+      cartCount: cartData.count,
+      cartSubtotal: cartData.subtotal,
     });
   })
 );
@@ -207,11 +265,15 @@ customerRouter.get(
       .map((item) => serializeProduct(item.product));
 
     const wishlistSlugs = customer.wishlistItems.map((item) => item.product.slug);
+    const cartData = await getCustomerCart(customer.id);
 
     res.json({
       customer: serializeCustomer(customer),
       wishlistSlugs,
       wishlistProducts: wishlistedProducts,
+      cart: cartData.cart,
+      cartCount: cartData.count,
+      cartSubtotal: cartData.subtotal,
       orders: customer.orderRequests.map((order) => ({
         id: order.id,
         status: order.status,
@@ -433,5 +495,201 @@ customerRouter.post(
       slugs: allSlugs,
       products,
     });
+  })
+);
+
+// Get Cart items
+customerRouter.get(
+  "/cart",
+  requireCustomer,
+  asyncHandler(async (req, res) => {
+    const result = await getCustomerCart(req.customer!.customerId);
+    res.json(result);
+  })
+);
+
+// Add item to Cart
+customerRouter.post(
+  "/cart",
+  requireCustomer,
+  asyncHandler(async (req, res) => {
+    const input = parseBody(cartItemAddSchema, req.body);
+    const product = await prisma.product.findUnique({
+      where: { slug: input.productSlug },
+    });
+
+    if (!product || product.workflowStatus !== "PUBLISHED") {
+      throw new HttpError(404, "Product not found or unavailable");
+    }
+
+    const cartKey = generateCartKey(product.slug, input.variantLabel, input.selectedOptions);
+    const existing = await prisma.cartItem.findUnique({
+      where: {
+        customerId_cartKey: {
+          customerId: req.customer!.customerId,
+          cartKey,
+        },
+      },
+    });
+
+    const quantityToAdd = input.quantity ?? 1;
+
+    if (existing) {
+      await prisma.cartItem.update({
+        where: { id: existing.id },
+        data: {
+          quantity: existing.quantity + quantityToAdd,
+          variantLabel: input.variantLabel || null,
+          selectedOptions: input.selectedOptions || undefined,
+        },
+      });
+    } else {
+      await prisma.cartItem.create({
+        data: {
+          customerId: req.customer!.customerId,
+          productId: product.id,
+          cartKey,
+          quantity: quantityToAdd,
+          variantLabel: input.variantLabel || null,
+          selectedOptions: input.selectedOptions || undefined,
+        },
+      });
+    }
+
+    const result = await getCustomerCart(req.customer!.customerId);
+    res.json(result);
+  })
+);
+
+// Update item quantity
+customerRouter.put(
+  "/cart/quantity",
+  requireCustomer,
+  asyncHandler(async (req, res) => {
+    const input = parseBody(cartItemUpdateSchema, req.body);
+
+    if (input.quantity <= 0) {
+      await prisma.cartItem.deleteMany({
+        where: {
+          customerId: req.customer!.customerId,
+          cartKey: input.cartKey,
+        },
+      });
+    } else {
+      await prisma.cartItem.updateMany({
+        where: {
+          customerId: req.customer!.customerId,
+          cartKey: input.cartKey,
+        },
+        data: {
+          quantity: input.quantity,
+        },
+      });
+    }
+
+    const result = await getCustomerCart(req.customer!.customerId);
+    res.json(result);
+  })
+);
+
+// Remove specific item from Cart
+customerRouter.delete(
+  "/cart/item/:cartKey",
+  requireCustomer,
+  asyncHandler(async (req, res) => {
+    const cartKey = routeParam(req, "cartKey");
+    if (!cartKey) {
+      throw new HttpError(400, "Missing cartKey");
+    }
+
+    await prisma.cartItem.deleteMany({
+      where: {
+        customerId: req.customer!.customerId,
+        cartKey,
+      },
+    });
+
+    const result = await getCustomerCart(req.customer!.customerId);
+    res.json(result);
+  })
+);
+
+// Clear Cart
+customerRouter.delete(
+  "/cart",
+  requireCustomer,
+  asyncHandler(async (req, res) => {
+    await prisma.cartItem.deleteMany({
+      where: {
+        customerId: req.customer!.customerId,
+      },
+    });
+
+    res.json({
+      ok: true,
+      cart: [],
+      count: 0,
+      subtotal: 0,
+    });
+  })
+);
+
+// Sync local guest cart to customer's account (merge)
+customerRouter.post(
+  "/cart/sync",
+  requireCustomer,
+  asyncHandler(async (req, res) => {
+    const { items } = parseBody(cartSyncSchema, req.body);
+
+    if (items.length > 0) {
+      const slugs = [...new Set(items.map((it) => it.productSlug))];
+      const products = await prisma.product.findMany({
+        where: { slug: { in: slugs } },
+        select: { id: true, slug: true, workflowStatus: true },
+      });
+      const productMap = new Map(products.map((p) => [p.slug, p]));
+
+      for (const item of items) {
+        const product = productMap.get(item.productSlug);
+        if (!product || product.workflowStatus !== "PUBLISHED") continue;
+
+        const cartKey = generateCartKey(product.slug, item.variantLabel, item.selectedOptions);
+        const existing = await prisma.cartItem.findUnique({
+          where: {
+            customerId_cartKey: {
+              customerId: req.customer!.customerId,
+              cartKey,
+            },
+          },
+        });
+
+        const syncQty = item.quantity ?? 1;
+
+        if (existing) {
+          await prisma.cartItem.update({
+            where: { id: existing.id },
+            data: {
+              quantity: Math.max(existing.quantity, syncQty),
+              variantLabel: item.variantLabel || null,
+              selectedOptions: item.selectedOptions || undefined,
+            },
+          });
+        } else {
+          await prisma.cartItem.create({
+            data: {
+              customerId: req.customer!.customerId,
+              productId: product.id,
+              cartKey,
+              quantity: syncQty,
+              variantLabel: item.variantLabel || null,
+              selectedOptions: item.selectedOptions || undefined,
+            },
+          });
+        }
+      }
+    }
+
+    const result = await getCustomerCart(req.customer!.customerId);
+    res.json(result);
   })
 );

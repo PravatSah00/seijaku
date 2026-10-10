@@ -136,28 +136,48 @@ export function ShopStateProvider({ children }: { children: React.ReactNode }) {
   const [checkoutSelectedOptions, setCheckoutSelectedOptions] = useState<Record<string, string> | null>(() => readStorageRecord(CHECKOUT_OPTIONS_KEY));
   const isSyncingRef = useRef(false);
 
-  // Sync wishlist with backend whenever customer logs in or token is active
+  // Sync wishlist and cart with backend whenever customer logs in or token is active
   useEffect(() => {
     if (!token || !isAuthenticated || isSyncingRef.current) return;
 
     let cancelled = false;
     isSyncingRef.current = true;
 
-    async function syncBackendWishlist() {
+    async function syncBackendState() {
       try {
         const localSlugs = readStorageArray(COLLECTION_KEY);
-        const res = await fetch("/api/public/customer/wishlist/sync", {
-          method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-            Accept: "application/json",
-            Authorization: `Bearer ${token}`,
-          },
-          body: JSON.stringify({ slugs: localSlugs }),
-        });
+        const localCart = readStorageCart();
 
-        if (res.ok && !cancelled) {
-          const data = await res.json();
+        const [wishlistRes, cartRes] = await Promise.all([
+          fetch("/api/public/customer/wishlist/sync", {
+            method: "POST",
+            headers: {
+              "Content-Type": "application/json",
+              Accept: "application/json",
+              Authorization: `Bearer ${token}`,
+            },
+            body: JSON.stringify({ slugs: localSlugs }),
+          }),
+          fetch("/api/public/customer/cart/sync", {
+            method: "POST",
+            headers: {
+              "Content-Type": "application/json",
+              Accept: "application/json",
+              Authorization: `Bearer ${token}`,
+            },
+            body: JSON.stringify({
+              items: localCart.map((it) => ({
+                productSlug: it.productSlug,
+                quantity: it.quantity,
+                variantLabel: it.variantLabel || null,
+                selectedOptions: it.selectedOptions || null,
+              })),
+            }),
+          }),
+        ]);
+
+        if (wishlistRes.ok && !cancelled) {
+          const data = await wishlistRes.json();
           if (Array.isArray(data.slugs)) {
             setCollection(data.slugs);
             if (typeof window !== "undefined") {
@@ -165,14 +185,24 @@ export function ShopStateProvider({ children }: { children: React.ReactNode }) {
             }
           }
         }
+
+        if (cartRes.ok && !cancelled) {
+          const cartData = await cartRes.json();
+          if (Array.isArray(cartData.cart)) {
+            setCart(cartData.cart);
+            if (typeof window !== "undefined") {
+              window.localStorage.setItem(CART_KEY, JSON.stringify(cartData.cart));
+            }
+          }
+        }
       } catch (err) {
-        console.error("Failed to sync customer wishlist", err);
+        console.error("Failed to sync customer state", err);
       } finally {
         isSyncingRef.current = false;
       }
     }
 
-    syncBackendWishlist();
+    syncBackendState();
 
     return () => {
       cancelled = true;
@@ -331,34 +361,113 @@ export function ShopStateProvider({ children }: { children: React.ReactNode }) {
         return [...prevCart, newItem];
       });
 
+      if (token) {
+        fetch("/api/public/customer/cart", {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            Accept: "application/json",
+            Authorization: `Bearer ${token}`,
+          },
+          body: JSON.stringify({
+            productSlug,
+            quantity,
+            variantLabel: variantLabel || null,
+            selectedOptions: selectedOptions || null,
+          }),
+        })
+          .then((res) => (res.ok ? res.json() : null))
+          .then((data) => {
+            if (data?.cart && Array.isArray(data.cart)) {
+              setCart(data.cart);
+            }
+          })
+          .catch((err) => console.error("Cart add error", err));
+      }
+
       if (options?.openDrawer !== false) {
         setIsCartOpen(true);
       }
     },
-    []
+    [token]
   );
 
-  const removeFromCart = useCallback((cartItemId: string) => {
-    setCart((prevCart) => prevCart.filter((item) => item.id !== cartItemId));
-  }, []);
-
-  const updateCartQuantity = useCallback((cartItemId: string, quantity: number) => {
-    if (quantity <= 0) {
+  const removeFromCart = useCallback(
+    (cartItemId: string) => {
       setCart((prevCart) => prevCart.filter((item) => item.id !== cartItemId));
-      return;
-    }
 
-    setCart((prevCart) =>
-      prevCart.map((item) => (item.id === cartItemId ? { ...item, quantity } : item))
-    );
-  }, []);
+      if (token) {
+        fetch(`/api/public/customer/cart/item/${encodeURIComponent(cartItemId)}`, {
+          method: "DELETE",
+          headers: {
+            Accept: "application/json",
+            Authorization: `Bearer ${token}`,
+          },
+        })
+          .then((res) => (res.ok ? res.json() : null))
+          .then((data) => {
+            if (data?.cart && Array.isArray(data.cart)) {
+              setCart(data.cart);
+            }
+          })
+          .catch((err) => console.error("Cart remove error", err));
+      }
+    },
+    [token]
+  );
+
+  const updateCartQuantity = useCallback(
+    (cartItemId: string, quantity: number) => {
+      if (quantity <= 0) {
+        removeFromCart(cartItemId);
+        return;
+      }
+
+      setCart((prevCart) =>
+        prevCart.map((item) => (item.id === cartItemId ? { ...item, quantity } : item))
+      );
+
+      if (token) {
+        fetch("/api/public/customer/cart/quantity", {
+          method: "PUT",
+          headers: {
+            "Content-Type": "application/json",
+            Accept: "application/json",
+            Authorization: `Bearer ${token}`,
+          },
+          body: JSON.stringify({
+            cartKey: cartItemId,
+            quantity,
+          }),
+        })
+          .then((res) => (res.ok ? res.json() : null))
+          .then((data) => {
+            if (data?.cart && Array.isArray(data.cart)) {
+              setCart(data.cart);
+            }
+          })
+          .catch((err) => console.error("Cart quantity update error", err));
+      }
+    },
+    [token, removeFromCart]
+  );
 
   const clearCart = useCallback(() => {
     setCart([]);
     if (typeof window !== "undefined") {
       window.localStorage.removeItem(CART_KEY);
     }
-  }, []);
+
+    if (token) {
+      fetch("/api/public/customer/cart", {
+        method: "DELETE",
+        headers: {
+          Accept: "application/json",
+          Authorization: `Bearer ${token}`,
+        },
+      }).catch((err) => console.error("Cart clear error", err));
+    }
+  }, [token]);
 
   const openCart = useCallback(() => setIsCartOpen(true), []);
   const closeCart = useCallback(() => setIsCartOpen(false), []);
