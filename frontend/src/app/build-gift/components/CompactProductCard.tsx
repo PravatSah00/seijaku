@@ -1,15 +1,15 @@
 "use client";
 
 import Image from "next/image";
-import { Heart } from "lucide-react";
+import { Heart, Sparkles } from "lucide-react";
 
-import type { ProductView } from "@/src/lib/product-types";
+import { hasVariantSelector, type ProductView } from "@/src/lib/product-types";
 import { useShopState } from "@/src/components/shop/ShopStateProvider";
 
 type CompactProductCardProps = {
     item: ProductView;
     isGiftSelected: boolean;
-    onGiftSelect: (item: ProductView) => void;
+    onGiftSelect: (item: ProductView, selection?: { label?: string | null; options?: Record<string, string> | null }) => void;
     onViewDetails: (slug: string) => void;
 };
 
@@ -21,6 +21,7 @@ export default function CompactProductCard({
 }: CompactProductCardProps) {
     const { isCollected } = useShopState();
     const collected = isCollected(item.slug);
+    const requiresVariants = hasVariantSelector(item);
 
     return (
         <article
@@ -90,23 +91,42 @@ export default function CompactProductCard({
                     </p>
                 </div>
 
-                <label className="mt-4 flex cursor-pointer items-center gap-3 border-t border-[#e6ddd0] pt-4">
-                    <input
-                        type="radio"
-                        name="gift-product"
-                        value={item.id}
-                        checked={isGiftSelected}
-                        onChange={() => onGiftSelect(item)}
-                        className="h-4 w-4 cursor-pointer accent-[#4A6350]"
-                    />
-                    <span
-                        className={`text-[11px] uppercase tracking-[0.14em] ${
-                            isGiftSelected ? "text-[#2B3B2F]" : "text-[#625a51]"
-                        }`}
-                    >
-                        {isGiftSelected ? "Selected for gift" : "Select for gift"}
-                    </span>
-                </label>
+                <div className="mt-4 border-t border-[#e6ddd0] pt-4">
+                    {requiresVariants ? (
+                        <button
+                            type="button"
+                            onClick={() => onViewDetails(item.slug)}
+                            className={`flex w-full items-center justify-between gap-2 rounded-lg px-3 py-2 text-[11px] font-medium uppercase tracking-[0.14em] transition-all ${
+                                isGiftSelected
+                                    ? "bg-[#4A6350]/15 text-[#2B3B2F] border border-[#4A6350]/40"
+                                    : "bg-[#e8ded0]/60 text-[#4c4238] hover:bg-[#e8ded0] border border-[#d8cdc0]"
+                            }`}
+                        >
+                            <span>
+                                {isGiftSelected ? "Selected ✓ (Change Options)" : "Select Options"}
+                            </span>
+                            <span aria-hidden>→</span>
+                        </button>
+                    ) : (
+                        <label className="flex cursor-pointer items-center gap-3">
+                            <input
+                                type="radio"
+                                name="gift-product"
+                                value={item.id}
+                                checked={isGiftSelected}
+                                onChange={() => onGiftSelect(item)}
+                                className="h-4 w-4 cursor-pointer accent-[#4A6350]"
+                            />
+                            <span
+                                className={`text-[11px] uppercase tracking-[0.14em] ${
+                                    isGiftSelected ? "text-[#2B3B2F] font-medium" : "text-[#625a51]"
+                                }`}
+                            >
+                                {isGiftSelected ? "Selected for gift ✓" : "Select for gift"}
+                            </span>
+                        </label>
+                    )}
+                </div>
             </div>
         </article>
     );

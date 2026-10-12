@@ -62,7 +62,7 @@ function sortProducts(items: ProductView[], sortBy: ShopSortOption) {
 type ProductDrawerProps = {
     products: ProductView[];
     selectedGiftProductId: string | null;
-    onSelect: (product: ProductView) => void;
+    onSelect: (product: ProductView, selection?: { label?: string | null; options?: Record<string, string> | null }) => void;
 };
 
 export default function ProductDrawer({
@@ -349,6 +349,7 @@ export default function ProductDrawer({
                 item={detailProduct}
                 isOpen={Boolean(detailProduct)}
                 onClose={() => updateQuery()}
+                onSelectGiftProduct={onSelect}
             />
         </>
     );

@@ -60,6 +60,15 @@ export default function CheckoutPageClient() {
 
   const [singleItem, setSingleItem] = useState<ProductView | null>(null);
   const [isInitialLoading, setIsInitialLoading] = useState<boolean>(Boolean(activeSlug));
+  const [selectedOptionsState, setSelectedOptionsState] = useState<Record<string, string>>(() => {
+    return checkoutSelectedOptions ?? {};
+  });
+
+  useEffect(() => {
+    if (checkoutSelectedOptions && Object.keys(checkoutSelectedOptions).length > 0) {
+      setSelectedOptionsState(checkoutSelectedOptions);
+    }
+  }, [checkoutSelectedOptions]);
 
   const [name, setName] = useState("");
   const [email, setEmail] = useState("");
@@ -106,20 +115,40 @@ export default function CheckoutPageClient() {
     };
   }, [activeSlug]);
 
+  const activeVariantLabel = useMemo(() => {
+    if (Object.keys(selectedOptionsState).length > 0) {
+      return Object.values(selectedOptionsState).filter(Boolean).join(" · ");
+    }
+    return checkoutVariantLabel;
+  }, [selectedOptionsState, checkoutVariantLabel]);
+
   // Determine line items for checkout (either single item or full cart)
   const lineItems = useMemo<CheckoutLineItem[]>(() => {
     if (singleItem) {
+      let unitPrice = singleItem.price;
+      if (singleItem.customizationOptions) {
+        for (const opt of singleItem.customizationOptions) {
+          const chosen = selectedOptionsState[opt.label];
+          if (chosen && opt.valuesWithPricing) {
+            const match = opt.valuesWithPricing.find((vp) => vp.label === chosen);
+            if (match && match.priceDelta) {
+              unitPrice += match.priceDelta;
+            }
+          }
+        }
+      }
+
       return [
         {
           productSlug: singleItem.slug,
           title: singleItem.title,
-          unitPrice: singleItem.price,
-          priceLabel: singleItem.priceLabel,
+          unitPrice,
+          priceLabel: `₹${unitPrice.toLocaleString("en-IN")}`,
           quantity: 1,
           image: singleItem.image,
           shortDescription: singleItem.shortDescription,
-          variantLabel: checkoutVariantLabel,
-          selectedOptions: checkoutSelectedOptions,
+          variantLabel: activeVariantLabel,
+          selectedOptions: Object.keys(selectedOptionsState).length > 0 ? selectedOptionsState : null,
           weightGrams: singleItem.weightGrams,
           lengthCm: singleItem.lengthCm,
           breadthCm: singleItem.breadthCm,
@@ -131,7 +160,7 @@ export default function CheckoutPageClient() {
       return cart;
     }
     return [];
-  }, [singleItem, checkoutVariantLabel, checkoutSelectedOptions, cart]);
+  }, [singleItem, activeVariantLabel, selectedOptionsState, cart]);
 
   const itemsSubtotal = useMemo(
     () => lineItems.reduce((sum, item) => sum + item.unitPrice * item.quantity, 0),
@@ -331,6 +360,72 @@ export default function CheckoutPageClient() {
                           ))}
                         </div>
                       )}
+
+                      {singleItem?.slug === line.productSlug &&
+                        singleItem?.customizationOptions &&
+                        singleItem.customizationOptions.length > 0 && (
+                          <div className="mt-4 border-t border-[#d8cec1]/60 pt-3">
+                            <div className="flex items-center justify-between mb-2">
+                              <p className="text-[10px] font-semibold uppercase tracking-[0.2em] text-[#8d7d6d]">
+                                Select Options & Variants
+                              </p>
+                              <span className="text-[10px] text-[#9a785d] italic">
+                                Required before checkout
+                              </span>
+                            </div>
+                            <div className="space-y-3">
+                              {singleItem.customizationOptions.map((opt) => (
+                                <div key={opt.label}>
+                                  <div className="flex items-center justify-between text-[11px] mb-1.5">
+                                    <span className="font-medium text-[#4b4238] uppercase tracking-[0.14em]">
+                                      {opt.label}:
+                                    </span>
+                                    {selectedOptionsState[opt.label] ? (
+                                      <span className="font-medium text-[#2e4a36]">
+                                        {selectedOptionsState[opt.label]}
+                                      </span>
+                                    ) : (
+                                      <span className="text-[11px] text-[#9a785d] font-medium">
+                                        Selection required
+                                      </span>
+                                    )}
+                                  </div>
+                                  <div className="flex flex-wrap gap-1.5">
+                                    {opt.values.map((val) => {
+                                      const isSelected = selectedOptionsState[opt.label] === val;
+                                      const pricingInfo = opt.valuesWithPricing?.find((vp) => vp.label === val);
+                                      const delta = pricingInfo?.priceDelta ?? 0;
+                                      return (
+                                        <button
+                                          key={val}
+                                          type="button"
+                                          onClick={() =>
+                                            setSelectedOptionsState((prev) => ({
+                                              ...prev,
+                                              [opt.label]: val,
+                                            }))
+                                          }
+                                          className={`rounded-full px-3 py-1 text-[11px] font-medium transition-all ${
+                                            isSelected
+                                              ? "bg-[#2e4a36] text-[#faf7f1] shadow-sm ring-1 ring-[#2e4a36]/20"
+                                              : "border border-[#d8cec1] bg-white text-[#4a4238] hover:border-[#2e4a36]"
+                                          }`}
+                                        >
+                                          <span>{val}</span>
+                                          {delta !== 0 && (
+                                            <span className="ml-1 text-[10px] opacity-80">
+                                              ({delta > 0 ? `+₹${delta}` : `-₹${Math.abs(delta)}`})
+                                            </span>
+                                          )}
+                                        </button>
+                                      );
+                                    })}
+                                  </div>
+                                </div>
+                              ))}
+                            </div>
+                          </div>
+                        )}
                     </div>
                   </div>
                 ))}
@@ -495,6 +590,16 @@ export default function CheckoutPageClient() {
                     if (!/^[0-9]{6}$/.test(shippingPincode)) {
                       setError("Pincode must be 6 digits.");
                       return;
+                    }
+
+                    if (singleItem?.customizationOptions && singleItem.customizationOptions.length > 0) {
+                      const unselectedOption = singleItem.customizationOptions.find(
+                        (opt) => !selectedOptionsState[opt.label]
+                      );
+                      if (unselectedOption) {
+                        setError(`Please select an option for "${unselectedOption.label}" above before proceeding.`);
+                        return;
+                      }
                     }
 
                     // 1. Create the Razorpay order on our backend.

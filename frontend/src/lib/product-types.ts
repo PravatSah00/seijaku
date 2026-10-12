@@ -29,15 +29,24 @@ export type ProductView = {
   ctaLabel?: string;
   status?: string;
   releaseDate?: string | null;
-  // Per-product variant pickers (e.g. colour tone). When present,
-  // ProductDetailDrawer renders a <select> per entry. If `required` is true,
-  // Buy Now stays disabled until a value is chosen.
+  // Per-product variant pickers (e.g. colour tone, size, blend).
   customizationOptions?: Array<{
     label: string;
     values: string[];
+    valuesWithPricing?: Array<{
+      label: string;
+      priceDelta: number;
+    }>;
     required?: boolean;
   }>;
 };
+
+export type ProductOptionValueView = {
+  label: string;
+  priceDelta: number;
+};
+
+export type ProductCustomizationOptionView = NonNullable<ProductView["customizationOptions"]>[number];
 
 export type BackendProductStatus =
   | "IN_STOCK"
@@ -60,6 +69,8 @@ type BackendProductMedia = {
 
 type BackendProductOptionValue = {
   label: string;
+  value?: string;
+  priceDeltaAmount?: number;
 };
 
 type BackendProductOption = {
@@ -162,6 +173,10 @@ export function normalizeBackendProduct(b: BackendProduct): ProductView | null {
         ? b.options.map((o) => ({
             label: o.label,
             values: o.values.map((v) => v.label),
+            valuesWithPricing: o.values.map((v) => ({
+              label: v.label,
+              priceDelta: v.priceDeltaAmount ?? 0,
+            })),
             required: o.required || undefined,
           }))
         : undefined,
@@ -244,13 +259,8 @@ export function getShopProductUseCase(item: ProductView): ShopUseCase | undefine
   return undefined;
 }
 
-// Editorial suppression: products listed here render no variant picker on
-// the storefront, even if the backend record carries `customizationOptions`.
-// Keep this list small and update it in lockstep with admin slug renames.
-export const slugsWithoutVariantSelector: ReadonlySet<string> = new Set([
-  "Kolkata-tea-diffuser",
-  "coffee-ceramic-diffuser-set",
-]);
+// Editorial suppression: keep this empty so all products with customization options show variants
+export const slugsWithoutVariantSelector: ReadonlySet<string> = new Set([]);
 
 export function hasVariantSelector(
   item: Pick<ProductView, "slug" | "customizationOptions">,

@@ -12,7 +12,6 @@ import type { ShopBridgePageConfig } from "@/src/lib/bridge-page-types";
 import { useMemo } from "react";
 
 import EditorialProductRow from "./EditorialProductRow";
-import ProductDetailDrawer from "./ProductDetailDrawer";
 import ShopProductActions from "./ShopProductActions";
 
 type ShopBridgePageClientProps = {
@@ -74,16 +73,9 @@ export default function ShopBridgePageClient({ page, products }: ShopBridgePageC
   const isDokraPage = page.slug === "dokra-ornaments";
 
   const updateQuery = (slug?: string) => {
-    const params = new URLSearchParams(searchParams.toString());
-
     if (slug) {
-      params.set("item", slug);
-    } else {
-      params.delete("item");
+      router.push(`/shop/${slug}`);
     }
-
-    const query = params.toString();
-    router.replace(query ? `${pathname}?${query}` : pathname, { scroll: false });
   };
 
   return (
@@ -206,8 +198,6 @@ export default function ShopBridgePageClient({ page, products }: ShopBridgePageC
           </div>
         </section>
       </main>
-
-      <ProductDetailDrawer item={selectedProduct} isOpen={Boolean(selectedProduct)} onClose={() => updateQuery()} />
     </>
   );
 }

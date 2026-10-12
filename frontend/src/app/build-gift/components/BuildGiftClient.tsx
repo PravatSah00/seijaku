@@ -2,7 +2,9 @@
 
 import type { ProductView } from "@/src/lib/product-types";
 import { Fragment, useEffect, useMemo, useState } from "react";
+import { useRouter } from "next/navigation";
 import ProductDrawer from "./ProductDrawer";
+import { useShopState } from "@/src/components/shop/ShopStateProvider";
 import {
     EMPTY_GIFT_SELECTION_IDS,
     clearGiftSelectionIds,
@@ -16,6 +18,11 @@ const PACKAGING_BOX_IMAGE = "/images/packging box.png";
 const REVIEW_LABEL = "Review";
 
 type GiftStepKey = "textile" | "scent" | "dokra";
+
+type ProductSelectionPayload = {
+    label?: string | null;
+    options?: Record<string, string> | null;
+};
 
 type StepConfig = {
     key: GiftStepKey;
@@ -225,7 +232,13 @@ function GiftHeader({
     );
 }
 
-function ItemRow({ product }: { product: ProductView }) {
+function ItemRow({
+    product,
+    selection,
+}: {
+    product: ProductView;
+    selection?: ProductSelectionPayload | null;
+}) {
     return (
         <div className="flex items-center gap-3">
             <span className="relative block h-12 w-12 shrink-0 overflow-hidden rounded-md bg-[#EFE5D8]">
@@ -239,9 +252,15 @@ function ItemRow({ product }: { product: ProductView }) {
                 <p className="truncate font-sans text-[12px] font-medium">
                     {product.title}
                 </p>
-                <p className="truncate font-sans text-[11px] text-[#6B564E]">
-                    {product.slug ?? ""}
-                </p>
+                {selection?.label ? (
+                    <p className="truncate font-sans text-[11px] font-medium text-[#4A6350]">
+                        {selection.label}
+                    </p>
+                ) : (
+                    <p className="truncate font-sans text-[11px] text-[#6B564E]">
+                        {product.slug ?? ""}
+                    </p>
+                )}
             </div>
             <span className="ml-auto shrink-0 font-sans text-[12px]">
                 {formatPrice(product.price)}
@@ -252,12 +271,14 @@ function ItemRow({ product }: { product: ProductView }) {
 
 function GiftSidebar({
     chosen,
+    optionsByStep,
     selected,
     total,
     nextLabel,
     onContinue,
 }: {
     chosen: ChosenGiftItem[];
+    optionsByStep: Record<GiftStepKey, ProductSelectionPayload | null>;
     selected: ProductView | null;
     total: number;
     nextLabel: string;
@@ -272,7 +293,13 @@ function GiftSidebar({
                 <div className="space-y-4 px-4 py-4">
                     {chosen.map(
                         ({ step, product }) =>
-                            product && <ItemRow key={step.key} product={product} />,
+                            product && (
+                                <ItemRow
+                                    key={step.key}
+                                    product={product}
+                                    selection={optionsByStep[step.key]}
+                                />
+                            ),
                     )}
                     <dl className="space-y-3 border-t border-[#E3D4C4] pt-3 font-sans text-[12px]">
                         {chosen.map(
@@ -317,14 +344,20 @@ function GiftSidebar({
 
 function GiftReview({
     chosen,
+    optionsByStep,
     total,
     added,
+    isSubmitting,
     onAddToBag,
+    onCheckout,
 }: {
     chosen: ChosenGiftItem[];
+    optionsByStep: Record<GiftStepKey, ProductSelectionPayload | null>;
     total: number;
     added: boolean;
+    isSubmitting: boolean;
     onAddToBag: () => void;
+    onCheckout: () => void;
 }) {
     const comboItems = [
         ...chosen.flatMap(({ step, product }) =>
@@ -334,7 +367,7 @@ function GiftReview({
                         key: step.key,
                         image: product.image ?? "",
                         name: product.title,
-                        sub: product.shortDescription ?? "",
+                        sub: optionsByStep[step.key]?.label || product.shortDescription || "",
                     },
                 ]
                 : [],
@@ -406,29 +439,36 @@ function GiftReview({
                     <h3 className="border-b border-[#E3D4C4] px-5 py-4 text-[17px]">
                         Order Summary
                     </h3>
-                    <dl className="space-y-3 px-5 py-5 font-sans text-[12px]">
+                    <dl className="space-y-3.5 px-5 py-5 font-sans text-[12px]">
                         {chosen.map(
                             ({ step, product }) =>
                                 product && (
                                     <div
                                         key={step.key}
-                                        className="flex justify-between gap-3"
+                                        className="flex items-start justify-between gap-3"
                                     >
                                         <img
                                             src={product.image ?? ""}
                                             alt={product.imageAlt ?? product.title}
                                             className="h-12 w-12 shrink-0 rounded-md object-cover"
                                         />
-                                        <dt className="truncate">
-                                            {product.title}
-                                        </dt>
+                                        <div className="min-w-0 flex-1">
+                                            <dt className="truncate font-medium text-[#2A1D1B]">
+                                                {product.title}
+                                            </dt>
+                                            {optionsByStep[step.key]?.label ? (
+                                                <dd className="mt-0.5 truncate text-[11px] font-medium text-[#4A6350]">
+                                                    {optionsByStep[step.key]?.label}
+                                                </dd>
+                                            ) : null}
+                                        </div>
                                         <dd className="shrink-0">
                                             {formatPrice(product.price)}
                                         </dd>
                                     </div>
                                 ),
                         )}
-                        <div className="flex justify-between gap-3">
+                        <div className="flex justify-between gap-3 border-t border-[#E3D4C4] pt-3">
                             <dt>Festive Packaging</dt>
                             <dd className="text-[#2B3B2F]">Free</dd>
                         </div>
@@ -437,17 +477,25 @@ function GiftReview({
                         <span>Subtotal</span>
                         <span className="text-[18px]">{formatPrice(total)}</span>
                     </div>
-                    <div className="px-5 pb-5">
+                    <div className="flex flex-col gap-2.5 px-5 pb-5">
+                        <button
+                            type="button"
+                            onClick={onCheckout}
+                            disabled={isSubmitting}
+                            className="flex h-[48px] w-full items-center justify-center gap-2 rounded-lg bg-[#2B3B2F] font-sans text-[11px] font-medium uppercase tracking-[0.18em] text-[#F6EEE4] transition-all hover:bg-[#1F2C23] hover:shadow-lg disabled:cursor-not-allowed disabled:opacity-75"
+                        >
+                            <span>{isSubmitting ? "Processing..." : "Proceed to Checkout"}</span>
+                            <span aria-hidden>→</span>
+                        </button>
                         <button
                             type="button"
                             onClick={onAddToBag}
-                            disabled={added}
-                            className="flex h-[48px] w-full items-center justify-center gap-2 rounded-lg bg-[#2B3B2F] font-sans text-[11px] font-medium uppercase tracking-[0.18em] text-[#F6EEE4] transition-all hover:bg-[#1F2C23] hover:shadow-lg disabled:cursor-default disabled:opacity-80"
+                            disabled={isSubmitting || added}
+                            className="flex h-[44px] w-full items-center justify-center gap-2 rounded-lg border border-[#2B3B2F] bg-transparent font-sans text-[11px] font-medium uppercase tracking-[0.18em] text-[#2B3B2F] transition-all hover:bg-[#2B3B2F]/5 disabled:cursor-default disabled:opacity-75"
                         >
                             {added ? "Added to bag ✓" : "Add to bag"}
-                            {!added && <span aria-hidden>→</span>}
                         </button>
-                        <p className="mt-3 text-center font-sans text-[10px] text-[#6B564E]">
+                        <p className="mt-2 text-center font-sans text-[10px] text-[#6B564E]">
                             Usually ships in 3 to 5 working days
                         </p>
                     </div>
@@ -462,12 +510,23 @@ export default function BuildGiftClient({
 }: {
     products: ProductView[];
 }) {
+    const router = useRouter();
+    const { addToCart, openCart } = useShopState();
+
     const [stepIndex, setStepIndex] = useState(0);
     const [selections, setSelections] = useState<GiftSelectionIds>({
         ...EMPTY_GIFT_SELECTION_IDS,
     });
+    const [optionsByStep, setOptionsByStep] = useState<
+        Record<GiftStepKey, ProductSelectionPayload | null>
+    >({
+        textile: null,
+        scent: null,
+        dokra: null,
+    });
     const [savedSelectionsLoaded, setSavedSelectionsLoaded] = useState(false);
     const [added, setAdded] = useState(false);
+    const [isSubmitting, setIsSubmitting] = useState(false);
 
     const isReview = stepIndex === STEPS.length;
     const step = STEPS[Math.min(stepIndex, STEPS.length - 1)];
@@ -529,11 +588,18 @@ export default function BuildGiftClient({
 
     const visibleProducts = productsForStep(products, step.key);
 
-    function selectProduct(product: ProductView) {
+    function selectProduct(
+        product: ProductView,
+        selection?: ProductSelectionPayload,
+    ) {
         if (isReview) return;
         setSelections((current) => ({
             ...current,
             [step.key]: product.id,
+        }));
+        setOptionsByStep((current) => ({
+            ...current,
+            [step.key]: selection ?? null,
         }));
         setAdded(false);
     }
@@ -550,19 +616,20 @@ export default function BuildGiftClient({
         goTo(stepIndex + 1);
     }
 
-    function addToBag() {
-        if (chosen.some(({ product }) => !product)) return;
-
+    async function persistAndAddGiftItems() {
         const items = chosen.map(({ step: giftStep, product }) => {
             if (!product) {
                 throw new Error(`Missing product for ${giftStep.key}`);
             }
+            const optionPayload = optionsByStep[giftStep.key];
             return {
-                type : giftStep.key,
-                id   : product.id,
-                slug : product.slug,
-                name : product.title,
+                type: giftStep.key,
+                id: product.id,
+                slug: product.slug,
+                name: product.title,
                 price: product.price,
+                variantLabel: optionPayload?.label,
+                selectedOptions: optionPayload?.options,
             };
         });
 
@@ -571,15 +638,58 @@ export default function BuildGiftClient({
                 GIFT_STORAGE_KEY,
                 JSON.stringify({ items, packaging: "festive", total }),
             );
+        } catch {
+            // Optional local cache
+        }
 
-            // TODO: Communicate with backend to finalize gift.
-            console.log("Gift bundle saved to localStorage:", { items, total });
+        // Add each chosen gift object to the active cart with its selected options
+        for (const item of chosen) {
+            if (item.product) {
+                const optionPayload = optionsByStep[item.step.key];
+                addToCart(
+                    {
+                        productSlug: item.product.slug,
+                        title: item.product.title,
+                        unitPrice: item.product.price,
+                        priceLabel: item.product.priceLabel,
+                        quantity: 1,
+                        image: item.product.image,
+                        shortDescription: item.product.shortDescription,
+                        variantLabel: optionPayload?.label || null,
+                        selectedOptions: optionPayload?.options || null,
+                    },
+                    { openDrawer: false },
+                );
+            }
+        }
 
-            // The draft has now been consumed by the finalized gift.
-            clearGiftSelectionIds();
+        clearGiftSelectionIds();
+    }
+
+    async function addToBag() {
+        if (chosen.some(({ product }) => !product)) return;
+        setIsSubmitting(true);
+        try {
+            await persistAndAddGiftItems();
             setAdded(true);
+            openCart();
         } catch (error) {
             console.error("Unable to save gift bundle.", error);
+        } finally {
+            setIsSubmitting(false);
+        }
+    }
+
+    async function proceedToCheckout() {
+        if (chosen.some(({ product }) => !product)) return;
+        setIsSubmitting(true);
+        try {
+            await persistAndAddGiftItems();
+            router.push("/checkout");
+        } catch (error) {
+            console.error("Failed to proceed to checkout.", error);
+        } finally {
+            setIsSubmitting(false);
         }
     }
 
@@ -599,9 +709,12 @@ export default function BuildGiftClient({
             {isReview ? (
                 <GiftReview
                     chosen={chosen}
+                    optionsByStep={optionsByStep}
                     total={total}
                     added={added}
+                    isSubmitting={isSubmitting}
                     onAddToBag={addToBag}
+                    onCheckout={proceedToCheckout}
                 />
             ) : (
                 <div className="mx-auto mt-10 grid max-w-[1400px] grid-cols-1 gap-8 sm:mt-12 lg:grid-cols-[minmax(0,1fr)_360px] lg:gap-10">
@@ -615,6 +728,7 @@ export default function BuildGiftClient({
                     </section>
                     <GiftSidebar
                         chosen={chosen}
+                        optionsByStep={optionsByStep}
                         selected={selected}
                         total={total}
                         nextLabel={nextLabel}

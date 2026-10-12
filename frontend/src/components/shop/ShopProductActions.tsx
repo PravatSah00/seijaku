@@ -6,6 +6,7 @@ import { Heart, ShoppingBag, Check } from "lucide-react";
 
 import { canonicalShopRoutes } from "@/src/lib/shop-routes";
 import {
+  hasVariantSelector,
   isNotifyMeProduct,
   isUnbuyableProduct,
   type ProductView,
@@ -30,114 +31,62 @@ type ShopProductActionsProps = {
 export default function ShopProductActions({
   item,
   onViewDetails,
-  selection,
-  isBuyDisabled = false,
-  buyLabel = "Buy Now",
   className = "",
-  showAddToCart = true,
 }: ShopProductActionsProps) {
   const router = useRouter();
-  const { beginCheckout, isCollected, toggleCollection, addToCart } = useShopState();
+  const { isCollected, toggleCollection } = useShopState();
   const collected = isCollected(item.slug);
   const [isNotifyOpen, setIsNotifyOpen] = useState(false);
-  const [addedRecently, setAddedRecently] = useState(false);
 
   const notifyMe = isNotifyMeProduct(item);
   const unbuyable = !notifyMe && isUnbuyableProduct(item);
 
-  const handleBuyNow = () => {
-    beginCheckout(item.slug, selection);
-    // Pass the slug as a URL query param too. URL is the most reliable
-    // bridge across navigation — beats both React-state propagation timing
-    // (Next.js prefetches /checkout) and a deferred localStorage write.
-    router.push(`${canonicalShopRoutes.checkout}?item=${encodeURIComponent(item.slug)}`);
-  };
-
-  const handleAddToCart = () => {
-    addToCart({
-      productSlug: item.slug,
-      title: item.title,
-      unitPrice: item.price,
-      priceLabel: item.priceLabel,
-      image: item.image,
-      shortDescription: item.shortDescription,
-      variantLabel: selection?.label,
-      selectedOptions: selection?.options,
-      weightGrams: item.weightGrams,
-      lengthCm: item.lengthCm,
-      breadthCm: item.breadthCm,
-      heightCm: item.heightCm,
-    });
-    setAddedRecently(true);
-    setTimeout(() => setAddedRecently(false), 2000);
+  const handleNavigateToDetails = () => {
+    if (onViewDetails) {
+      onViewDetails();
+      return;
+    }
+    router.push(`/shop/${item.slug}`);
   };
 
   return (
     <>
-      <div className={`flex flex-wrap items-center gap-x-3 gap-y-3 ${className}`.trim()}>
+      <div className={`flex flex-wrap items-center gap-x-3 gap-y-2.5 ${className}`.trim()}>
         {notifyMe ? (
           <button
             type="button"
             onClick={() => setIsNotifyOpen(true)}
-            className="inline-flex min-h-[42px] items-center justify-center rounded-full bg-[#294536] px-5 py-2.5 text-[10px] font-medium uppercase tracking-[0.22em] text-[#f4efe8] transition-colors duration-200 hover:bg-[#21382c] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#8c7b68] focus-visible:ring-offset-2 focus-visible:ring-offset-[#f6f1e8]"
+            className="inline-flex min-h-[40px] items-center justify-center rounded-full bg-[#294536] px-5 py-2 text-[10px] font-medium uppercase tracking-[0.22em] text-[#f4efe8] transition-colors duration-200 hover:bg-[#21382c] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#8c7b68]"
           >
             Notify Me
           </button>
         ) : unbuyable ? (
-          <span className="inline-flex min-h-[42px] items-center justify-center rounded-full border border-[rgba(111,100,86,0.18)] bg-[rgba(255,255,255,0.6)] px-5 py-2.5 text-[10px] font-medium uppercase tracking-[0.22em] text-[#7a7064]">
+          <span className="inline-flex min-h-[40px] items-center justify-center rounded-full border border-[rgba(111,100,86,0.18)] bg-[rgba(255,255,255,0.6)] px-4 py-2 text-[10px] font-medium uppercase tracking-[0.22em] text-[#7a7064]">
             {item.status}
           </span>
         ) : (
-          <>
-            {showAddToCart && (
-              <button
-                type="button"
-                disabled={isBuyDisabled}
-                onClick={handleAddToCart}
-                className="inline-flex min-h-[42px] items-center justify-center gap-1.5 rounded-full border border-[#294536]/30 bg-white/80 px-4 py-2.5 text-[10px] font-medium uppercase tracking-[0.2em] text-[#294536] transition-all duration-200 hover:bg-[#294536] hover:text-[#f4efe8] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#8c7b68] focus-visible:ring-offset-2 focus-visible:ring-offset-[#f6f1e8] disabled:cursor-not-allowed disabled:opacity-50"
-              >
-                {addedRecently ? (
-                  <>
-                    <Check size={12} strokeWidth={2.5} />
-                    <span>Added to Bag</span>
-                  </>
-                ) : (
-                  <>
-                    <ShoppingBag size={12} />
-                    <span>Add to Bag</span>
-                  </>
-                )}
-              </button>
-            )}
-
-            <button
-              type="button"
-              disabled={isBuyDisabled}
-              onClick={handleBuyNow}
-              className="inline-flex min-h-[42px] items-center justify-center rounded-full bg-[#294536] px-5 py-2.5 text-[10px] font-medium uppercase tracking-[0.22em] text-[#f4efe8] transition-colors duration-200 hover:bg-[#21382c] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#8c7b68] focus-visible:ring-offset-2 focus-visible:ring-offset-[#f6f1e8] disabled:cursor-not-allowed disabled:bg-[#a8a095] disabled:text-[#f4efe8]/90"
-            >
-              {buyLabel}
-            </button>
-          </>
+          <button
+            type="button"
+            onClick={handleNavigateToDetails}
+            className="inline-flex min-h-[40px] items-center justify-center gap-1.5 rounded-full bg-[#294536] px-5 py-2 text-[10px] font-medium uppercase tracking-[0.22em] text-[#f4efe8] transition-colors duration-200 hover:bg-[#1f3529] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#8c7b68]"
+          >
+            <span>View Details</span>
+            <span aria-hidden>→</span>
+          </button>
         )}
 
         <button
           type="button"
-          onClick={onViewDetails}
-          className="text-[11px] uppercase tracking-[0.2em] text-[#4f473f] underline decoration-black/10 underline-offset-4 transition-opacity duration-200 hover:opacity-70 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#8c7b68] focus-visible:ring-offset-2 focus-visible:ring-offset-[#f6f1e8]"
-        >
-          View Details
-        </button>
-
-        <button
-          type="button"
           onClick={() => toggleCollection(item.slug)}
-          className={`inline-flex items-center gap-1.5 text-[11px] uppercase tracking-[0.18em] transition-all duration-200 hover:opacity-75 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#8c7b68] focus-visible:ring-offset-2 focus-visible:ring-offset-[#f6f1e8] ${
-            collected ? "font-medium text-[#2e4a36]" : "text-[#5d5449]"
+          aria-label={collected ? `Remove ${item.title} from wishlist` : `Add ${item.title} to wishlist`}
+          className={`inline-flex min-h-[40px] items-center gap-1.5 rounded-full border px-3.5 py-2 text-[10px] uppercase tracking-[0.18em] transition-all duration-200 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#8c7b68] ${
+            collected
+              ? "border-[#2e4a36]/40 bg-[#2e4a36]/10 font-medium text-[#2e4a36]"
+              : "border-[rgba(111,100,86,0.18)] bg-white/70 text-[#5d5449] hover:bg-white hover:text-[#1d1a17]"
           }`}
         >
-          <Heart size={13} fill={collected ? "currentColor" : "none"} strokeWidth={2} />
-          <span>{collected ? "Wishlisted" : "Wishlist"}</span>
+          <Heart size={12} fill={collected ? "currentColor" : "none"} strokeWidth={2} />
+          <span>{collected ? "Saved" : "Save"}</span>
         </button>
       </div>
 
