@@ -26,7 +26,6 @@ import {
 
 import ActiveFilterChips from "./ActiveFilterChips";
 import CompactProductCard from "./CompactProductCard";
-import ProductDetailDrawer from "./ProductDetailDrawer";
 import ShopFilterDrawer from "./ShopFilterDrawer";
 import ShopFilterRail from "./ShopFilterRail";
 
@@ -83,7 +82,6 @@ type ShopAllPageClientProps = {
 export default function ShopAllPageClient({ products }: ShopAllPageClientProps) {
   const pathname                                    = usePathname();
   const router                                      = useRouter();
-  const searchParams                                = useSearchParams();
   const [searchValue, setSearchValue]               = useState("");
   const [selectedType, setSelectedType]             = useState<ShopTypeFilterOption | "All">("All");
   const [selectedMaterial, setSelectedMaterial]     = useState<ShopMaterialFilterOption | "All">("All");
@@ -93,10 +91,6 @@ export default function ShopAllPageClient({ products }: ShopAllPageClientProps) 
   const [visibleCount, setVisibleCount]             = useState(INITIAL_BATCH_SIZE);
   const [isRailCollapsed, setIsRailCollapsed]       = useState(false);
   const [isFilterDrawerOpen, setIsFilterDrawerOpen] = useState(false);
-  const selectedSlug                                = searchParams.get("item");
-  const selectedProduct: ProductView | null         = selectedSlug
-    ? products.find((p) => p.slug === selectedSlug) ?? null
-    : null;
 
   // Hydrate collapse preference from localStorage after mount to avoid SSR
   // mismatch. Reads once, writes on each toggle below.
@@ -112,16 +106,9 @@ export default function ShopAllPageClient({ products }: ShopAllPageClientProps) 
   }, []);
 
   const updateQuery = (slug?: string) => {
-    const params = new URLSearchParams(searchParams.toString());
-
     if (slug) {
-      params.set("item", slug);
-    } else {
-      params.delete("item");
+      router.push(`/shop/${slug}`);
     }
-
-    const query = params.toString();
-    router.replace(query ? `${pathname}?${query}` : pathname, { scroll: false });
   };
 
   const filteredProducts = useMemo(() => {
@@ -358,8 +345,6 @@ export default function ShopAllPageClient({ products }: ShopAllPageClientProps) 
         onClose={() => setIsFilterDrawerOpen(false)}
         {...filterRailProps}
       />
-
-      <ProductDetailDrawer item={selectedProduct} isOpen={Boolean(selectedProduct)} onClose={() => updateQuery()} />
     </>
   );
 }

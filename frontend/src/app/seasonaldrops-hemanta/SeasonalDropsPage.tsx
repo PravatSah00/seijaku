@@ -1,9 +1,8 @@
-﻿"use client";
+"use client";
 
 import Link from "next/link";
 import { useEffect, useState, type MouseEvent } from "react";
 
-import ProductDetailDrawer from "@/src/components/shop/ProductDetailDrawer";
 import type { ShopBridgePageConfig } from "@/src/lib/bridge-page-types";
 import { isNotifyMeProduct, isUnbuyableProduct, type ProductView } from "@/src/lib/product-types";
 
@@ -1594,13 +1593,7 @@ export default function SeasonalDropsPage({ productsBySlug, bridge }: SeasonalDr
           }
         }
       `}</style>
-    </main>
-
-    <ProductDetailDrawer
-      item={selectedProduct}
-      isOpen={Boolean(selectedProduct)}
-      onClose={() => setSelectedSlug(null)}
-    />
+      </main>
     </>
   );
 }

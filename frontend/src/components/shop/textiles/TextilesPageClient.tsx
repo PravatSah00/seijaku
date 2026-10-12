@@ -1,10 +1,9 @@
-﻿"use client";
+"use client";
 
 import { useMemo, useState } from "react";
 import Link from "next/link";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 
-import ProductDetailDrawer from "@/src/components/shop/ProductDetailDrawer";
 import type { ShopBridgePageConfig } from "@/src/lib/bridge-page-types";
 import { canonicalShopRoutes } from "@/src/lib/shop-routes";
 import { type ProductView } from "@/src/lib/product-types";
@@ -59,16 +58,9 @@ export default function TextilesPageClient({ page, products }: TextilesPageClien
   }, [products]);
 
   const updateQuery = (slug?: string) => {
-    const params = new URLSearchParams(searchParams.toString());
-
     if (slug) {
-      params.set("item", slug);
-    } else {
-      params.delete("item");
+      router.push(`/shop/${slug}`);
     }
-
-    const query = params.toString();
-    router.replace(query ? `${pathname}?${query}` : pathname, { scroll: false });
   };
 
   return (
@@ -151,8 +143,6 @@ export default function TextilesPageClient({ page, products }: TextilesPageClien
           </div>
         </section>
       </main>
-
-      <ProductDetailDrawer item={selectedProduct} isOpen={Boolean(selectedProduct)} onClose={() => updateQuery()} />
     </>
   );
 }

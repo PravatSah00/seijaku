@@ -30,8 +30,7 @@ export default function ProductDetailDrawer({ item, isOpen, onClose }: ProductDe
   const useCase = item ? getShopProductUseCase(item) : undefined;
   const showVariants = item ? hasVariantSelector(item) : false;
   const customizationOptions = showVariants ? item?.customizationOptions ?? [] : [];
-  const allRequiredSelected = customizationOptions
-    .filter((option) => option.required)
+  const allRequiredSelected = customizationOptions.length === 0 || customizationOptions
     .every((option) => Boolean(selectedOptions[option.label]));
   const selectionLabel = Object.values(selectedOptions).filter(Boolean).join(" · ");
   // Prefer a hand-maintained videoUrl from the registry (so editors can
@@ -220,44 +219,70 @@ export default function ProductDetailDrawer({ item, isOpen, onClose }: ProductDe
               ) : null}
 
               {customizationOptions.length > 0 ? (
-                <div className="mt-7 space-y-4">
+                <div className="mt-7 space-y-5 rounded-[20px] border border-[rgba(86,76,64,0.12)] bg-[#faf6ee] p-4 sm:p-5">
+                  <p className="text-[10px] uppercase tracking-[0.24em] text-[#837260] font-semibold">
+                    Select Your Options & Variants
+                  </p>
                   {customizationOptions.map((option) => {
                     const selectId = `${item.slug}-${option.label.replace(/\s+/g, "-").toLowerCase()}`;
                     const selected = selectedOptions[option.label] ?? "";
                     return (
                       <div key={option.label}>
-                        <label
-                          htmlFor={selectId}
-                          className="mb-2 block text-[10px] uppercase tracking-[0.24em] text-[#837260]"
-                        >
-                          {option.label}
-                          {option.required ? <span className="ml-1 text-[#9a785d]" aria-hidden>*</span> : null}
-                        </label>
-                        <select
-                          id={selectId}
-                          value={selected}
-                          onChange={(event) =>
-                            setSelectedOptions((current) => ({
-                              ...current,
-                              [option.label]: event.target.value,
-                            }))
-                          }
-                          className="w-full rounded-[16px] border border-[rgba(86,76,64,0.14)] bg-[#fbf8f3] px-4 py-3 text-[14px] text-[#3f3831] outline-none transition-colors focus:border-[#2e4a36] focus:ring-2 focus:ring-[#2e4a36]/15"
-                        >
-                          <option value="">Select an option</option>
-                          {option.values.map((value) => (
-                            <option key={value} value={value}>
-                              {value}
-                            </option>
-                          ))}
-                        </select>
+                        <div className="mb-2 flex items-center justify-between">
+                          <label
+                            htmlFor={selectId}
+                            className="block text-[11px] uppercase tracking-[0.16em] text-[#5c5044] font-medium"
+                          >
+                            {option.label}
+                            <span className="ml-1 text-[#9a785d]" aria-hidden>*</span>
+                          </label>
+                          {selected ? (
+                            <span className="text-[12px] font-medium text-[#2e4a36]">
+                              {selected}
+                            </span>
+                          ) : (
+                            <span className="text-[11px] italic text-[#9a785d]">
+                              Required
+                            </span>
+                          )}
+                        </div>
+                        <div className="flex flex-wrap gap-2">
+                          {option.values.map((value) => {
+                            const isChosen = selected === value;
+                            return (
+                              <button
+                                key={value}
+                                type="button"
+                                onClick={() =>
+                                  setSelectedOptions((current) => ({
+                                    ...current,
+                                    [option.label]: value,
+                                  }))
+                                }
+                                className={`rounded-full px-3.5 py-1.5 text-[12px] font-medium transition-all ${
+                                  isChosen
+                                    ? "bg-[#2e4a36] text-[#faf7f1] shadow-sm ring-2 ring-[#2e4a36]/20"
+                                    : "border border-[#d8cec1] bg-white text-[#4a4238] hover:border-[#2e4a36]"
+                                }`}
+                              >
+                                {value}
+                              </button>
+                            );
+                          })}
+                        </div>
                       </div>
                     );
                   })}
                 </div>
               ) : null}
 
-              <div className="mt-8">
+              {!allRequiredSelected && customizationOptions.length > 0 ? (
+                <p className="mt-4 text-[12px] font-medium text-[#9a785d]">
+                  Please choose your options above before proceeding to buy.
+                </p>
+              ) : null}
+
+              <div className="mt-6">
                 <ShopProductActions
                   item={item}
                   onViewDetails={onClose}

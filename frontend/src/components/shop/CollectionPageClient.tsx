@@ -14,7 +14,6 @@ import {
 import { useCustomerAuth } from "@/src/lib/customer-auth";
 
 import EditorialProductRow from "./EditorialProductRow";
-import ProductDetailDrawer from "./ProductDetailDrawer";
 import { useShopState } from "./ShopStateProvider";
 
 export default function CollectionPageClient() {
@@ -74,16 +73,9 @@ export default function CollectionPageClient() {
   const selectedItem = selectedSlug ? productsBySlug[selectedSlug] ?? null : null;
 
   const updateQuery = (slug?: string) => {
-    const params = new URLSearchParams(searchParams.toString());
-
     if (slug) {
-      params.set("item", slug);
-    } else {
-      params.delete("item");
+      router.push(`/shop/${slug}`);
     }
-
-    const query = params.toString();
-    router.replace(query ? `${pathname}?${query}` : pathname, { scroll: false });
   };
 
   return (
@@ -217,8 +209,6 @@ export default function CollectionPageClient() {
           </div>
         </section>
       </main>
-
-      <ProductDetailDrawer item={selectedItem} isOpen={Boolean(selectedItem)} onClose={() => updateQuery()} />
     </>
   );
 }

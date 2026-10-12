@@ -5,7 +5,6 @@ import Link from "next/link";
 import { useMemo, useState } from "react";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 
-import ProductDetailDrawer from "@/src/components/shop/ProductDetailDrawer";
 import ShopProductActions from "@/src/components/shop/ShopProductActions";
 import type { ShopBridgePageConfig } from "@/src/lib/bridge-page-types";
 import { canonicalShopRoutes } from "@/src/lib/shop-routes";
@@ -46,14 +45,9 @@ export default function DiffusersPageClient({ page, products }: DiffusersPageCli
   );
 
   const updateQuery = (slug?: string) => {
-    const params = new URLSearchParams(searchParams.toString());
     if (slug) {
-      params.set("item", slug);
-    } else {
-      params.delete("item");
+      router.push(`/shop/${slug}`);
     }
-    const query = params.toString();
-    router.replace(query ? `${pathname}?${query}` : pathname, { scroll: false });
   };
 
   return (
@@ -126,12 +120,6 @@ export default function DiffusersPageClient({ page, products }: DiffusersPageCli
           </div>
         </section>
       </main>
-
-      <ProductDetailDrawer
-        item={selectedProduct}
-        isOpen={Boolean(selectedProduct)}
-        onClose={() => updateQuery()}
-      />
     </>
   );
 }
