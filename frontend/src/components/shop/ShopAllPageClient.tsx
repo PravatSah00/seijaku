@@ -81,20 +81,20 @@ type ShopAllPageClientProps = {
 };
 
 export default function ShopAllPageClient({ products }: ShopAllPageClientProps) {
-  const pathname = usePathname();
-  const router = useRouter();
-  const searchParams = useSearchParams();
-  const [searchValue, setSearchValue] = useState("");
-  const [selectedType, setSelectedType] = useState<ShopTypeFilterOption | "All">("All");
-  const [selectedMaterial, setSelectedMaterial] = useState<ShopMaterialFilterOption | "All">("All");
-  const [selectedUseCase, setSelectedUseCase] = useState<ShopUseCase | "All">("All");
-  const [selectedPrice, setSelectedPrice] = useState<ShopPriceFilterOption | "All">("All");
-  const [sortBy, setSortBy] = useState<ShopSortOption>("Recommended");
-  const [visibleCount, setVisibleCount] = useState(INITIAL_BATCH_SIZE);
-  const [isRailCollapsed, setIsRailCollapsed] = useState(false);
+  const pathname                                    = usePathname();
+  const router                                      = useRouter();
+  const searchParams                                = useSearchParams();
+  const [searchValue, setSearchValue]               = useState("");
+  const [selectedType, setSelectedType]             = useState<ShopTypeFilterOption | "All">("All");
+  const [selectedMaterial, setSelectedMaterial]     = useState<ShopMaterialFilterOption | "All">("All");
+  const [selectedUseCase, setSelectedUseCase]       = useState<ShopUseCase | "All">("All");
+  const [selectedPrice, setSelectedPrice]           = useState<ShopPriceFilterOption | "All">("All");
+  const [sortBy, setSortBy]                         = useState<ShopSortOption>("Recommended");
+  const [visibleCount, setVisibleCount]             = useState(INITIAL_BATCH_SIZE);
+  const [isRailCollapsed, setIsRailCollapsed]       = useState(false);
   const [isFilterDrawerOpen, setIsFilterDrawerOpen] = useState(false);
-  const selectedSlug = searchParams.get("item");
-  const selectedProduct: ProductView | null = selectedSlug
+  const selectedSlug                                = searchParams.get("item");
+  const selectedProduct: ProductView | null         = selectedSlug
     ? products.find((p) => p.slug === selectedSlug) ?? null
     : null;
 

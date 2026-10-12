@@ -658,8 +658,8 @@ model CartAbandonedNotification {
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
-  @@index([customerId])
   @@unique([customerId, type])
+  @@index([customerId])
   @@index([status, scheduledAt])
 }
 
