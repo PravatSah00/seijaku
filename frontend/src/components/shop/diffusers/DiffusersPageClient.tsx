@@ -20,7 +20,7 @@ type DiffusersPageClientProps = {
 const DIFFUSERS_SLUGS = [
   "Kolkata-tea-diffuser",
   "coffee-ceramic-diffuser-set",
-  "black-kitty-terracotta-diffuser",
+  "black-kitty-electric-and-manual-ceramic-diffuser",
 ] as const;
 
 export default function DiffusersPageClient({ page, products }: DiffusersPageClientProps) {
