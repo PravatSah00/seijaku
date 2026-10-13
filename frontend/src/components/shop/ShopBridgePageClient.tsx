@@ -35,7 +35,7 @@ function DokraBroochRow({
       <div className={`grid items-center gap-12 lg:grid-cols-[minmax(0,520px)_minmax(0,1fr)] lg:gap-16 ${reverse ? "lg:[&>*:first-child]:order-2" : ""}`}>
         <div className="relative mx-auto w-full max-w-[520px] overflow-hidden rounded-lg bg-[#e6ddd1]">
           <div className="relative aspect-[4/4.8] w-full">
-            <Image src={item.image} alt={item.imageAlt ?? item.title} fill sizes="(min-width: 1024px) 40vw, 100vw" className="object-cover" />
+            <Image src={item.image || "/images/Home Page hero image 1.png"} alt={item.imageAlt ?? item.title} fill sizes="(min-width: 1024px) 40vw, 100vw" className="object-cover" />
           </div>
         </div>
 
@@ -81,7 +81,7 @@ export default function ShopBridgePageClient({ page, products }: ShopBridgePageC
   return (
     <>
       <main className="min-h-screen bg-[#F3EFE7] pt-[72px] text-[#3a3a3a] sm:pt-[76px]">
-        <section className="section-primary bg-[#F3EFE7]">
+        <section className="section-primary bg-[#F3EFE7]" data-reveal>
           <div className="page-container grid gap-12 md:grid-cols-[0.9fr_1.1fr] md:items-center">
             <div className="max-w-[520px]">
               <p className="text-[10px] uppercase tracking-[0.28em] text-[#9a785d]">{page.heroEyebrow}</p>
@@ -98,21 +98,21 @@ export default function ShopBridgePageClient({ page, products }: ShopBridgePageC
                 >
                   {isDokraPage ? "Explore Brooches" : `Explore ${page.navLabel}`}
                 </a>
-                <a
+                <Link
                   href={canonicalShopRoutes.shopAll}
                   className="inline-flex items-center gap-2 text-[12px] font-medium uppercase tracking-[0.18em] text-[#6b6257] hover:text-[#2e4a36]"
                 >
                   <span>Shop All</span>
                   <span aria-hidden>&rarr;</span>
-                </a>
+                </Link>
               </div>
             </div>
 
             <div className="relative w-full max-w-[420px] justify-self-center overflow-hidden rounded-[24px] border border-[#D8CEC1] bg-[#FAF7F1] p-3 shadow-[0_18px_40px_rgba(48,40,30,0.06)] md:max-w-[460px]">
               <div className="relative aspect-[4/4.9] overflow-hidden rounded-[20px]">
                 <Image
-                  src={page.heroImage}
-                  alt={page.heroImageAlt}
+                  src={page.heroImage || "/images/Home Page hero image 1.png"}
+                  alt={page.heroImageAlt || page.heroTitle || "Dokra ornaments"}
                   fill
                   priority
                   sizes="(min-width: 768px) 55vw, 100vw"
@@ -126,7 +126,7 @@ export default function ShopBridgePageClient({ page, products }: ShopBridgePageC
           </div>
         </section>
 
-        <section id="bridge-products" className="section-primary bg-[#F3EFE7]">
+        <section id="bridge-products" className="section-primary bg-[#F3EFE7]" data-reveal>
           <div className="page-container max-w-[1180px]">
             {isDokraPage ? (
               <>
