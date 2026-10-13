@@ -42,7 +42,7 @@ export default function TextileCategorySection({
           <TextileProductCard
             key={item.product.slug}
             item={item.product}
-            categoryLabel="Modal Silk Textile"
+            categoryLabel="Modal and Muslin Silk Textiles"
             description={item.description}
             pairingLabel={item.pairingLabel}
             pairingHref={item.pairingHref}

@@ -2,13 +2,13 @@
 
 import Image from "next/image";
 import Link from "next/link";
-import { useMemo, useState } from "react";
-import { usePathname, useRouter, useSearchParams } from "next/navigation";
+import { useMemo } from "react";
+import { useRouter } from "next/navigation";
 
 import ShopProductActions from "@/src/components/shop/ShopProductActions";
 import type { ShopBridgePageConfig } from "@/src/lib/bridge-page-types";
 import { canonicalShopRoutes } from "@/src/lib/shop-routes";
-import { hasVariantSelector, type ProductView } from "@/src/lib/product-types";
+import type { ProductView } from "@/src/lib/product-types";
 
 import DiffuserPageIntro from "./DiffuserPageIntro";
 
@@ -20,21 +20,16 @@ type DiffusersPageClientProps = {
 const DIFFUSERS_SLUGS = [
   "Kolkata-tea-diffuser",
   "coffee-ceramic-diffuser-set",
-  "black-kitty-terracotta-diffuser",
+  "black-kitty-electric-and-manual-ceramic-diffuser",
 ] as const;
 
 export default function DiffusersPageClient({ page, products }: DiffusersPageClientProps) {
-  const pathname = usePathname();
   const router = useRouter();
-  const searchParams = useSearchParams();
-  const [selectedVariants, setSelectedVariants] = useState<Record<string, string>>({});
-  const selectedSlug = searchParams.get("item");
 
   const productsBySlug = useMemo(
     () => new Map(products.map((p) => [p.slug, p])),
     [products],
   );
-  const selectedProduct = selectedSlug ? productsBySlug.get(selectedSlug) ?? null : null;
 
   const curated = useMemo(
     () =>
@@ -95,10 +90,6 @@ export default function DiffusersPageClient({ page, products }: DiffusersPageCli
                   key={product.slug}
                   index={index}
                   product={product}
-                  selectedOption={selectedVariants[product.slug] ?? ""}
-                  onSelectOption={(value) =>
-                    setSelectedVariants((current) => ({ ...current, [product.slug]: value }))
-                  }
                   onViewDetails={() => updateQuery(product.slug)}
                 />
               ))}
@@ -127,25 +118,16 @@ export default function DiffusersPageClient({ page, products }: DiffusersPageCli
 type DiffuserFeatureRowProps = {
   index: number;
   product: ProductView;
-  selectedOption: string;
-  onSelectOption: (value: string) => void;
   onViewDetails: () => void;
 };
 
 function DiffuserFeatureRow({
   index,
   product,
-  selectedOption,
-  onSelectOption,
   onViewDetails,
 }: DiffuserFeatureRowProps) {
   const reverse = index % 2 === 1;
-  const hasOptions = hasVariantSelector(product);
-  const firstOption = hasOptions ? product.customizationOptions?.[0] : undefined;
-  const variantLabel = firstOption?.label;
-  const options = firstOption?.values ?? [];
   const indexLabel = String(index + 1).padStart(2, "0");
-  const selectId = `${product.slug}-variant`;
 
   return (
     <article
@@ -178,43 +160,10 @@ function DiffuserFeatureRow({
         ) : null}
         <p className="mt-6 text-[14px] tracking-[0.04em] text-[#312b25]">{product.priceLabel}</p>
 
-        {hasOptions ? (
-          <div className="mt-6 max-w-[360px]">
-            <label
-              htmlFor={selectId}
-              className="mb-2 block text-[10px] uppercase tracking-[0.24em] text-[#837260]"
-            >
-              {variantLabel}
-            </label>
-            <select
-              id={selectId}
-              value={selectedOption}
-              onChange={(event) => onSelectOption(event.target.value)}
-              className="w-full rounded-[16px] border border-[rgba(86,76,64,0.14)] bg-[#fbf8f3] px-4 py-3 text-[14px] text-[#3f3831] outline-none transition-colors focus:border-[#2e4a36] focus:ring-2 focus:ring-[#2e4a36]/15"
-            >
-              <option value="">Select an option</option>
-              {options.map((option) => (
-                <option key={option} value={option}>
-                  {option}
-                </option>
-              ))}
-            </select>
-          </div>
-        ) : null}
-
         <ShopProductActions
           className="mt-7"
           item={product}
           onViewDetails={onViewDetails}
-          isBuyDisabled={hasOptions ? !selectedOption : false}
-          selection={
-            hasOptions
-              ? {
-                  label: selectedOption,
-                  options: { [variantLabel!]: selectedOption },
-                }
-              : undefined
-          }
         />
       </div>
     </article>

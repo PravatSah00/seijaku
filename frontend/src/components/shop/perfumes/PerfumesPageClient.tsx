@@ -187,7 +187,7 @@ export default function PerfumesPageClient({ page, products }: PerfumesPageClien
 
           <PerfumeCategorySection
             id="textiles"
-            eyebrow="FOR TEXTILES"
+            eyebrow="For Skin and Textiles"
             title="Fragrance that stays with what you wear"
             description="Oil-based blends that settle into fabric and move with you."
             categoryLabel="Cloth"
