@@ -1,32 +1,38 @@
 "use client";
 
 import Image from "next/image";
-import { Heart, Sparkles } from "lucide-react";
+import { Heart } from "lucide-react";
 
 import { hasVariantSelector, type ProductView } from "@/src/lib/product-types";
 import { useShopState } from "@/src/components/shop/ShopStateProvider";
+import type { ProductSelectionPayload } from "../utils";
 
 type CompactProductCardProps = {
     item: ProductView;
-    isGiftSelected: boolean;
-    onGiftSelect: (item: ProductView, selection?: { label?: string | null; options?: Record<string, string> | null }) => void;
+    selectedCountForProduct: number;
+    canAddMore: boolean;
+    onAddGiftProduct: (item: ProductView, selection?: ProductSelectionPayload) => void;
+    onRemoveGiftProduct: (item: ProductView) => void;
     onViewDetails: (slug: string) => void;
 };
 
 export default function CompactProductCard({
     item,
-    isGiftSelected,
-    onGiftSelect,
+    selectedCountForProduct,
+    canAddMore,
+    onAddGiftProduct,
+    onRemoveGiftProduct,
     onViewDetails,
 }: CompactProductCardProps) {
     const { isCollected } = useShopState();
     const collected = isCollected(item.slug);
     const requiresVariants = hasVariantSelector(item);
+    const isSelected = selectedCountForProduct > 0;
 
     return (
         <article
             className={`group relative overflow-hidden rounded-[24px] border bg-[linear-gradient(180deg,#fbf8f2_0%,#f7f1e8_100%)] shadow-[0_10px_24px_rgba(44,37,28,0.03)] transition-all duration-300 hover:-translate-y-[1px] hover:shadow-[0_16px_30px_rgba(44,37,28,0.045)] ${
-                isGiftSelected
+                isSelected
                     ? "border-[#4A6350] ring-1 ring-[#4A6350]/20"
                     : "border-[rgba(111,100,86,0.11)] hover:border-[rgba(111,100,86,0.18)]"
             }`}
@@ -93,38 +99,78 @@ export default function CompactProductCard({
 
                 <div className="mt-4 border-t border-[#e6ddd0] pt-4">
                     {requiresVariants ? (
+                        isSelected ? (
+                            <div className="flex items-center justify-between gap-2">
+                                <span className="rounded-md border border-[#4A6350]/30 bg-[#4A6350]/15 px-2.5 py-1 font-sans text-[11px] font-medium text-[#2B3B2F]">
+                                    In Gift ({selectedCountForProduct})
+                                </span>
+                                <div className="flex items-center gap-1.5 font-sans">
+                                    <button
+                                        type="button"
+                                        disabled={!canAddMore}
+                                        onClick={() => onViewDetails(item.slug)}
+                                        className="rounded-lg border border-[#4A6350] px-2.5 py-1 text-[10px] font-medium uppercase tracking-wider text-[#2B3B2F] transition-colors hover:bg-[#4A6350] hover:text-[#F6EEE4] disabled:cursor-not-allowed disabled:opacity-40"
+                                        title={canAddMore ? "Add another with options" : "Gift box is full"}
+                                    >
+                                        + Options
+                                    </button>
+                                    <button
+                                        type="button"
+                                        onClick={() => onRemoveGiftProduct(item)}
+                                        className="rounded-lg border border-[#8A483B]/30 px-2 py-1 text-[10px] uppercase tracking-wider text-[#8A483B] transition-colors hover:bg-[#8A483B]/10"
+                                        title="Remove one from gift"
+                                    >
+                                        Remove
+                                    </button>
+                                </div>
+                            </div>
+                        ) : (
+                            <button
+                                type="button"
+                                disabled={!canAddMore}
+                                onClick={() => onViewDetails(item.slug)}
+                                className="flex w-full items-center justify-between gap-2 rounded-lg border border-[#d8cdc0] bg-[#e8ded0]/60 px-3 py-2 text-[11px] font-medium uppercase tracking-[0.14em] text-[#4c4238] transition-all hover:bg-[#e8ded0] disabled:cursor-not-allowed disabled:opacity-40"
+                            >
+                                <span>{canAddMore ? "Select Options" : "Gift Box Full"}</span>
+                                <span aria-hidden>→</span>
+                            </button>
+                        )
+                    ) : isSelected ? (
+                        <div className="flex items-center justify-between gap-2 font-sans">
+                            <span className="rounded-md border border-[#4A6350]/30 bg-[#4A6350]/15 px-2.5 py-1 text-[11px] font-medium text-[#2B3B2F]">
+                                In Gift ({selectedCountForProduct})
+                            </span>
+                            <div className="flex items-center gap-1.5">
+                                <button
+                                    type="button"
+                                    onClick={() => onRemoveGiftProduct(item)}
+                                    className="flex h-7 w-7 items-center justify-center rounded-md border border-[#8A483B]/40 text-[13px] font-bold text-[#8A483B] transition-colors hover:bg-[#8A483B]/10"
+                                    title="Remove one"
+                                >
+                                    −
+                                </button>
+                                <button
+                                    type="button"
+                                    disabled={!canAddMore}
+                                    onClick={() => onAddGiftProduct(item)}
+                                    className="flex h-7 w-7 items-center justify-center rounded-md border border-[#4A6350] bg-[#4A6350] text-[13px] font-bold text-[#F6EEE4] transition-colors hover:bg-[#3D5242] disabled:cursor-not-allowed disabled:opacity-40"
+                                    title={canAddMore ? "Add another" : "Gift box is full"}
+                                >
+                                    +
+                                </button>
+                            </div>
+                        </div>
+                    ) : (
                         <button
                             type="button"
-                            onClick={() => onViewDetails(item.slug)}
-                            className={`flex w-full items-center justify-between gap-2 rounded-lg px-3 py-2 text-[11px] font-medium uppercase tracking-[0.14em] transition-all ${
-                                isGiftSelected
-                                    ? "bg-[#4A6350]/15 text-[#2B3B2F] border border-[#4A6350]/40"
-                                    : "bg-[#e8ded0]/60 text-[#4c4238] hover:bg-[#e8ded0] border border-[#d8cdc0]"
-                            }`}
+                            disabled={!canAddMore}
+                            onClick={() => onAddGiftProduct(item)}
+                            className="flex w-full items-center justify-center gap-2 rounded-lg bg-[#EFE5D8] px-3 py-2 text-[11px] font-medium uppercase tracking-[0.14em] text-[#2B3B2F] transition-all hover:bg-[#E2D4C3] disabled:cursor-not-allowed disabled:opacity-40"
                         >
                             <span>
-                                {isGiftSelected ? "Selected ✓ (Change Options)" : "Select Options"}
+                                {canAddMore ? "+ Add to Gift Box" : "Gift Box Full"}
                             </span>
-                            <span aria-hidden>→</span>
                         </button>
-                    ) : (
-                        <label className="flex cursor-pointer items-center gap-3">
-                            <input
-                                type="radio"
-                                name="gift-product"
-                                value={item.id}
-                                checked={isGiftSelected}
-                                onChange={() => onGiftSelect(item)}
-                                className="h-4 w-4 cursor-pointer accent-[#4A6350]"
-                            />
-                            <span
-                                className={`text-[11px] uppercase tracking-[0.14em] ${
-                                    isGiftSelected ? "text-[#2B3B2F] font-medium" : "text-[#625a51]"
-                                }`}
-                            >
-                                {isGiftSelected ? "Selected for gift ✓" : "Select for gift"}
-                            </span>
-                        </label>
                     )}
                 </div>
             </div>

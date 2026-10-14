@@ -98,6 +98,7 @@ const productInclude = {
   options: { include: { values: true } },
   collections: { include: { collection: true } },
   categories: { include: { category: true } },
+  bridgePages: { include: { bridgePage: true } },
 } satisfies Prisma.ProductInclude;
 
 function routeParam(req: { params: Record<string, string | string[] | undefined> }, key: string) {

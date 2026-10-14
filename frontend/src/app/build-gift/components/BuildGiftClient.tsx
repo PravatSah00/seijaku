@@ -3,182 +3,259 @@
 import type { ProductView } from "@/src/lib/product-types";
 import { Fragment, useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
+import { ArrowRight, Plus, Trash2 } from "lucide-react";
 import ProductDrawer from "./ProductDrawer";
 import { useShopState } from "@/src/components/shop/ShopStateProvider";
 import {
-    EMPTY_GIFT_SELECTION_IDS,
-    clearGiftSelectionIds,
-    getGiftSelectionIds,
-    setGiftSelectionIds,
-    type GiftSelectionIds,
+    DEFAULT_MAX_GIFT_PRODUCTS,
+    DEFAULT_MIN_GIFT_PRODUCTS,
+    clearStoredGiftItems,
+    generateInstanceId,
+    getStoredGiftItems,
+    setStoredGiftItems,
+    type GiftItemSelection,
+    type GiftStepKey,
+    type ProductSelectionPayload,
 } from "../utils";
 
 const GIFT_STORAGE_KEY = "seijaku-bag";
 const PACKAGING_BOX_IMAGE = "/images/packging box.png";
 const REVIEW_LABEL = "Review";
 
-type GiftStepKey = "textile" | "scent" | "dokra";
-
-type ProductSelectionPayload = {
-    label?: string | null;
-    options?: Record<string, string> | null;
-};
-
 type StepConfig = {
     key: GiftStepKey;
     label: string;
+    shortLabel: string;
+    routeSlug: string;
     title: [string, string];
     description: string;
     tagline: string[];
 };
 
-type ChosenGiftItem = {
-    step: StepConfig;
+type ResolvedGiftItem = GiftItemSelection & {
     product: ProductView | null;
+    stepConfig: StepConfig;
 };
 
 const STEPS: StepConfig[] = [
     {
-        key: "textile",
-        label: "Textile",
-        title: ["Choose", "Your Textile"],
-        description: "A fabric for everyday rituals. From quiet mornings to special evenings, choose a design that feels right.",
+        key: "scarves-and-squares",
+        label: "Scarves & Squares",
+        shortLabel: "Textiles",
+        routeSlug: "scarves-and-squares",
+        title: ["Choose", "Your Scarf & Square"],
+        description:
+            "Modal silk scarves and pocket squares crafted with quiet colour stories, soft drape, and hand-rolled finishes.",
         tagline: ["Cloth.", "Colour. A", "quieter gesture."],
     },
     {
-        key: "scent",
-        label: "Scent",
+        key: "perfumes",
+        label: "Perfumes",
+        shortLabel: "Perfumes",
+        routeSlug: "perfumes",
         title: ["Choose", "Your Scent"],
-        description: "Fragrances to invite attention — what we feel, what we remember, and how we inhabit a moment.",
+        description:
+            "Natural perfumes and botanical fragrance oils composed for skin, cloth, and quiet contemplation.",
         tagline: ["Scent.", "Memory.", "A slower you."],
     },
     {
-        key: "dokra",
-        label: "Dokra",
+        key: "dokra-ornaments",
+        label: "Dokra Ornaments",
+        shortLabel: "Dokra",
+        routeSlug: "dokra-ornaments",
         title: ["Choose", "Your Dokra"],
-        description: "Handcrafted in Bankura, West Bengal. Each piece carries the warmth of craft, and a quiet sense of meaning.",
+        description:
+            "Handcrafted lost-wax brass brooches from West Bengal — tactile ritual anchors for everyday stillness.",
         tagline: ["Small object.", "Bigger stories."],
+    },
+    {
+        key: "diffusers",
+        label: "Diffusers",
+        shortLabel: "Diffusers",
+        routeSlug: "diffusers",
+        title: ["Choose", "Your Diffuser"],
+        description:
+            "Stone, reed, and brass diffusers with botanical fragrance refills to gently shape your room atmosphere.",
+        tagline: ["Vessel.", "Diffusion.", "Still air."],
     },
 ];
 
 const REVIEW_FEATURES = [
     { icon: "/images/Leaf Icon.png", label: "Artisanal & Ethical" },
-    { icon: "/images/Gift Box Icon.png", label: "Beautifully Packaged" },
+    { icon: "/images/Gift Box Icon.png", label: "Festive Gift Packaging" },
     { icon: "/images/India Icon.png", label: "Made in India" },
     { icon: "/images/Heart.png", label: "Gifts with Meaning" },
 ] as const;
-
-const STEP_KEYWORDS: Record<GiftStepKey, string[]> = {
-    textile: ["lifestyle", "home"],
-    scent: ["perfumes", "fragrances", "scent"],
-    dokra: ["dokra-ornaments"],
-};
 
 function formatPrice(amount: number) {
     return `₹${amount.toLocaleString("en-IN")}`;
 }
 
-function productsForStep(products: ProductView[], step: GiftStepKey) {
-    const keywords = STEP_KEYWORDS[step];
-    const matches = products.filter((product) => {
-        const searchable = [
-            product.type,
-            product.material,
-            product.title,
-            product.shortDescription,
-        ]
-            .filter(Boolean)
-            .join(" ")
-            .toLowerCase();
+function isProductForStep(product: ProductView, stepKey: GiftStepKey): boolean {
+    if (product.bridgeCategory === stepKey) {
+        return true;
+    }
 
-        return keywords.some((keyword) => searchable.includes(keyword));
-    });
+    const typeStr = (product.type || "").toLowerCase();
+    const materialStr = (product.material || "").toLowerCase();
+    const slugStr = (product.slug || "").toLowerCase();
+    const titleStr = (product.title || "").toLowerCase();
+    const descStr = (product.shortDescription || "").toLowerCase();
+    const allText = `${typeStr} ${materialStr} ${slugStr} ${titleStr} ${descStr}`;
 
-    // Fallback keeps the page usable if backend taxonomy changes.
+    switch (stepKey) {
+        case "scarves-and-squares":
+            return (
+                typeStr.includes("scarf") ||
+                typeStr.includes("square") ||
+                slugStr.includes("scarf") ||
+                slugStr.includes("square") ||
+                slugStr.includes("modal-silk") ||
+                materialStr.includes("textile")
+            );
+
+        case "perfumes":
+            if (
+                slugStr.includes("diffuser") ||
+                typeStr.includes("diffuser") ||
+                typeStr.includes("wax melt")
+            ) {
+                return false;
+            }
+            return (
+                typeStr.includes("perfume") ||
+                typeStr.includes("fragrance") ||
+                slugStr.includes("perfume") ||
+                slugStr.includes("trilogy") ||
+                slugStr.includes("textile-oil") ||
+                slugStr.includes("breath-of-pines") ||
+                slugStr.includes("summer-held-close") ||
+                slugStr.includes("morning-desk") ||
+                materialStr.includes("botanical fragrance")
+            );
+
+        case "dokra-ornaments":
+            return (
+                typeStr.includes("dokra") ||
+                typeStr.includes("ornament") ||
+                materialStr.includes("dokra") ||
+                slugStr.includes("dokra") ||
+                slugStr.includes("brooch") ||
+                slugStr.includes("handfan") ||
+                slugStr.includes("bell-brooch") ||
+                slugStr.includes("conch-brooch") ||
+                allText.includes("dokra")
+            );
+
+        case "diffusers":
+            return (
+                typeStr.includes("diffuser") ||
+                typeStr.includes("wax melt") ||
+                slugStr.includes("diffuser") ||
+                slugStr.includes("wax-melt") ||
+                slugStr.includes("vessel") ||
+                slugStr.includes("room-stone") ||
+                slugStr.includes("stone-oil")
+            );
+    }
+}
+
+function productsForStep(products: ProductView[], step: GiftStepKey): ProductView[] {
+    const matches = products.filter((product) => isProductForStep(product, step));
     return matches.length > 0 ? matches : products;
-}
-
-function validateStoredSelections(
-    products: ProductView[],
-    stored: GiftSelectionIds,
-): GiftSelectionIds {
-    const validId = (step: GiftStepKey) => {
-        const id = stored[step];
-        if (!id) return null;
-        return productsForStep(products, step).some(
-            (product) => product.id === id,
-        )
-            ? id
-            : null;
-    };
-
-    return {
-        textile: validId("textile"),
-        scent: validId("scent"),
-        dokra: validId("dokra"),
-    };
-}
-
-function firstIncompleteStep(selections: GiftSelectionIds) {
-    const index = STEPS.findIndex((step) => !selections[step.key]);
-    return index === -1 ? STEPS.length : index;
 }
 
 function Stepper({
     current,
+    countsByStep,
+    canAccessReview,
     onGo,
 }: {
     current: number;
+    countsByStep: Record<GiftStepKey, number>;
+    canAccessReview: boolean;
     onGo: (index: number) => void;
 }) {
-    const labels = [...STEPS.map((step) => step.label), REVIEW_LABEL];
+    const stepsWithReview = [
+        ...STEPS.map((step, idx) => ({
+            label: step.shortLabel,
+            fullLabel: step.label,
+            isReview: false,
+            count: countsByStep[step.key] ?? 0,
+            index: idx,
+        })),
+        {
+            label: REVIEW_LABEL,
+            fullLabel: REVIEW_LABEL,
+            isReview: true,
+            count: 0,
+            index: STEPS.length,
+        },
+    ];
+
     return (
-        <ol className="flex flex-wrap items-center justify-center gap-x-1 gap-y-1 sm:gap-x-2">
-            {labels.map((label, index) => {
+        <ol className="flex flex-wrap items-center justify-center gap-x-1.5 gap-y-2 sm:gap-x-2.5">
+            {stepsWithReview.map((item, index) => {
                 const active = index === current;
-                const done = index < current;
+                const hasSelections = !item.isReview && item.count > 0;
+                const isClickable = !item.isReview || canAccessReview || current === STEPS.length;
+
                 const content = (
                     <span className="flex items-center gap-1.5">
                         <span
-                            className={`flex h-6 w-6 items-center justify-center rounded-full font-sans text-[10px] font-medium transition-all duration-300 ${active
+                            className={`flex h-6 w-6 items-center justify-center rounded-full font-sans text-[10px] font-medium transition-all duration-300 ${
+                                active
                                     ? "bg-[#2B3B2F] text-[#F6EEE4] ring-4 ring-[#2B3B2F]/15"
-                                    : done
+                                    : hasSelections
                                         ? "bg-[#4A6350] text-[#F6EEE4]"
                                         : "bg-[#E8DDCD] text-[#8C7A6E]"
-                                }`}
+                            }`}
                         >
-                            {done ? "✓" : index + 1}
+                            {hasSelections ? `${item.count}` : index + 1}
                         </span>
                         <span
-                            className={`hidden font-sans text-[10px] tracking-wide sm:inline ${active ? "font-medium text-[#2A1D1B]" : "text-[#8C7A6E]"
-                                }`}
+                            className={`hidden font-sans text-[10px] tracking-wide sm:inline ${
+                                active
+                                    ? "font-medium text-[#2A1D1B]"
+                                    : isClickable
+                                        ? "text-[#54433D]"
+                                        : "text-[#8C7A6E]/70"
+                            }`}
                         >
-                            {label}
+                            {item.label}
+                            {hasSelections && ` (${item.count})`}
                         </span>
                     </span>
                 );
 
                 return (
-                    <Fragment key={label}>
+                    <Fragment key={item.label}>
                         {index > 0 && (
                             <span
                                 aria-hidden
-                                className={`h-px w-3 sm:w-5 ${index <= current ? "bg-[#4A6350]" : "bg-[#D8C8B7]"
-                                    }`}
+                                className={`h-px w-2.5 sm:w-4 ${
+                                    index <= current
+                                        ? "bg-[#4A6350]"
+                                        : "bg-[#D8C8B7]"
+                                }`}
                             />
                         )}
                         <li>
-                            {done ? (
+                            {isClickable ? (
                                 <button
                                     type="button"
                                     onClick={() => onGo(index)}
-                                    className="transition-opacity hover:opacity-75"
-                                    aria-label={`Go back to ${label}`}
+                                    className={`transition-opacity hover:opacity-80 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#4A6350] rounded-full ${
+                                        active ? "cursor-default" : "cursor-pointer"
+                                    }`}
+                                    aria-label={`Go to ${item.fullLabel}`}
                                 >
                                     {content}
                                 </button>
                             ) : (
-                                content
+                                <span className="opacity-55 cursor-not-allowed">
+                                    {content}
+                                </span>
                             )}
                         </li>
                     </Fragment>
@@ -192,21 +269,29 @@ function GiftHeader({
     isReview,
     stepIndex,
     step,
+    selectedCount,
+    minProducts,
+    maxProducts,
 }: {
     isReview: boolean;
     stepIndex: number;
     step: StepConfig;
+    selectedCount: number;
+    minProducts: number;
+    maxProducts: number;
 }) {
     return (
         <header className="mx-auto mt-2 max-w-3xl text-center sm:mt-6">
             <p className="font-sans text-[10px] uppercase tracking-[0.28em] text-[#8C7A6E]">
-                {isReview ? "Final Step" : `Step ${stepIndex + 1} of 4`}
+                {isReview
+                    ? `Review & Checkout · ${selectedCount} of max ${maxProducts} Items Chosen`
+                    : `Section ${stepIndex + 1} of ${STEPS.length} · ${selectedCount}/${maxProducts} items chosen (min. ${minProducts})`}
             </p>
             <h1 className="mt-4 text-[34px] font-normal leading-[1.05] sm:text-[46px] lg:text-[56px]">
                 {isReview ? (
                     <>
                         Your Seijaku{" "}
-                        <span className="italic text-[#4A6350]">Gift</span>
+                        <span className="italic text-[#4A6350]">Gift Box</span>
                     </>
                 ) : (
                     <>
@@ -219,7 +304,7 @@ function GiftHeader({
             </h1>
             <p className="mx-auto mt-5 max-w-xl text-[15px] leading-[1.65] text-[#3A2B28] sm:text-[16px]">
                 {isReview
-                    ? "Thoughtful choices. A more meaningful gift."
+                    ? "Carefully composed objects in festive packaging. Update or remove any item before checkout."
                     : step.description}
             </p>
             {!isReview && (
@@ -232,110 +317,167 @@ function GiftHeader({
     );
 }
 
-function ItemRow({
-    product,
-    selection,
-}: {
-    product: ProductView;
-    selection?: ProductSelectionPayload | null;
-}) {
-    return (
-        <div className="flex items-center gap-3">
-            <span className="relative block h-12 w-12 shrink-0 overflow-hidden rounded-md bg-[#EFE5D8]">
-                <img
-                    src={product.image ?? ""}
-                    alt={product.imageAlt ?? product.title}
-                    className="absolute inset-0 h-full w-full object-cover"
-                />
-            </span>
-            <div className="min-w-0">
-                <p className="truncate font-sans text-[12px] font-medium">
-                    {product.title}
-                </p>
-                {selection?.label ? (
-                    <p className="truncate font-sans text-[11px] font-medium text-[#4A6350]">
-                        {selection.label}
-                    </p>
-                ) : (
-                    <p className="truncate font-sans text-[11px] text-[#6B564E]">
-                        {product.slug ?? ""}
-                    </p>
-                )}
-            </div>
-            <span className="ml-auto shrink-0 font-sans text-[12px]">
-                {formatPrice(product.price)}
-            </span>
-        </div>
-    );
-}
-
 function GiftSidebar({
-    chosen,
-    optionsByStep,
-    selected,
+    items,
+    currentStepIndex,
+    selectedCount,
+    minProducts,
+    maxProducts,
     total,
-    nextLabel,
     onContinue,
+    onGoToStep,
+    onRemoveItem,
+    onProceedToReview,
 }: {
-    chosen: ChosenGiftItem[];
-    optionsByStep: Record<GiftStepKey, ProductSelectionPayload | null>;
-    selected: ProductView | null;
+    items: ResolvedGiftItem[];
+    currentStepIndex: number;
+    selectedCount: number;
+    minProducts: number;
+    maxProducts: number;
     total: number;
-    nextLabel: string;
     onContinue: () => void;
+    onGoToStep: (index: number) => void;
+    onRemoveItem: (instanceId: string) => void;
+    onProceedToReview: () => void;
 }) {
+    const currentStepConfig = STEPS[currentStepIndex];
+    const canReview = selectedCount >= minProducts;
+    const isFull = selectedCount >= maxProducts;
+
     return (
         <aside className="flex min-w-0 flex-col gap-6 lg:sticky lg:top-28 lg:self-start">
-            <div className="overflow-hidden rounded-2xl border border-[#E3D4C4] bg-[#FAF4EC]">
-                <h3 className="border-b border-[#E3D4C4] bg-[#EFE3D3] px-4 py-3 text-[16px]">
-                    Your Gift
-                </h3>
-                <div className="space-y-4 px-4 py-4">
-                    {chosen.map(
-                        ({ step, product }) =>
-                            product && (
-                                <ItemRow
-                                    key={step.key}
-                                    product={product}
-                                    selection={optionsByStep[step.key]}
-                                />
-                            ),
-                    )}
-                    <dl className="space-y-3 border-t border-[#E3D4C4] pt-3 font-sans text-[12px]">
-                        {chosen.map(
-                            ({ step, product }) =>
-                                !product && (
-                                    <div
-                                        key={step.key}
-                                        className="flex justify-between"
-                                    >
-                                        <dt>{step.label}</dt>
-                                        <dd className="text-[#6B564E]">
-                                            Not selected
-                                        </dd>
+            <div className="overflow-hidden rounded-2xl border border-[#E3D4C4] bg-[#FAF4EC] shadow-sm">
+                <div className="flex items-center justify-between border-b border-[#E3D4C4] bg-[#EFE3D3] px-4 py-3">
+                    <h3 className="text-[16px] font-normal">Your Gift Box</h3>
+                    <span
+                        className={`font-sans text-[10px] font-medium px-2 py-0.5 rounded-full ${
+                            canReview
+                                ? "bg-[#4A6350]/15 text-[#2B3B2F]"
+                                : "bg-[#8A483B]/10 text-[#8A483B]"
+                        }`}
+                    >
+                        {selectedCount}/{maxProducts} items {isFull ? "(Full)" : `(min. ${minProducts})`}
+                    </span>
+                </div>
+
+                <div className="space-y-3 px-4 py-4">
+                    {items.length === 0 ? (
+                        <div className="rounded-lg border border-dashed border-[#E3D4C4] p-4 text-center font-sans text-[12px] text-[#7A6A5E]">
+                            <p className="font-medium text-[#4C413A]">Box is empty</p>
+                            <p className="mt-1 text-[11px]">
+                                Add {minProducts} to {maxProducts} products from any section.
+                            </p>
+                        </div>
+                    ) : (
+                        items.map((item) => {
+                            if (!item.product) return null;
+                            const sectionIndex = STEPS.findIndex(
+                                (s) => s.key === item.stepKey,
+                            );
+                            return (
+                                <div
+                                    key={item.instanceId}
+                                    className="group flex items-start gap-3 rounded-lg p-2 transition-colors hover:bg-[#F2E8DC]/60"
+                                >
+                                    <span className="relative block h-12 w-12 shrink-0 overflow-hidden rounded-md bg-[#EFE5D8]">
+                                        <img
+                                            src={item.product.image ?? ""}
+                                            alt={item.product.imageAlt ?? item.product.title}
+                                            className="absolute inset-0 h-full w-full object-cover"
+                                        />
+                                    </span>
+                                    <div className="min-w-0 flex-1 font-sans">
+                                        <p className="truncate text-[12px] font-medium text-[#2A1D1B]">
+                                            {item.product.title}
+                                        </p>
+                                        <p className="truncate text-[10px] text-[#8C7A6E]">
+                                            {item.stepConfig.label}
+                                            {item.options?.label ? ` · ${item.options.label}` : ""}
+                                        </p>
+                                        <div className="mt-1 flex items-center gap-2 text-[10px]">
+                                            {sectionIndex >= 0 && (
+                                                <>
+                                                    <button
+                                                        type="button"
+                                                        onClick={() => onGoToStep(sectionIndex)}
+                                                        className="text-[#4A6350] underline hover:text-[#2B3B2F]"
+                                                    >
+                                                        View Section
+                                                    </button>
+                                                    <span className="text-[#C9B9A6]">·</span>
+                                                </>
+                                            )}
+                                            <button
+                                                type="button"
+                                                onClick={() => onRemoveItem(item.instanceId)}
+                                                className="text-[#8A483B] underline hover:text-[#64291F]"
+                                            >
+                                                Remove
+                                            </button>
+                                        </div>
                                     </div>
-                                ),
-                        )}
-                        <div className="flex justify-between text-[11px]">
-                            <dt>Festive Packaging</dt>
-                            <dd className="text-[#2B3B2F]">Free</dd>
+                                    <span className="ml-auto shrink-0 font-sans text-[12px] font-medium text-[#2A1D1B]">
+                                        {formatPrice(item.product.price)}
+                                    </span>
+                                </div>
+                            );
+                        })
+                    )}
+
+                    {!isFull && selectedCount > 0 && (
+                        <p className="border-t border-[#E3D4C4]/50 pt-2 text-center font-sans text-[11px] text-[#7A6A5E]">
+                            You can add {maxProducts - selectedCount} more product{maxProducts - selectedCount > 1 ? "s" : ""} from any section.
+                        </p>
+                    )}
+
+                    <dl className="space-y-2 border-t border-[#E3D4C4] pt-3 font-sans text-[12px]">
+                        <div className="flex justify-between text-[11px] text-[#6B564E]">
+                            <dt>Festive Gift Box & Handwritten Card</dt>
+                            <dd className="font-medium text-[#2B3B2F]">Free</dd>
                         </div>
                     </dl>
                 </div>
-                <div className="border-t border-[#E3D4C4] px-4 py-4">
+
+                <div className="border-t border-[#E3D4C4] bg-[#F7EFE5]/50 px-4 py-4">
                     <div className="flex items-center justify-between font-sans text-[13px]">
                         <span>Subtotal</span>
-                        <span className="text-[16px]">{formatPrice(total)}</span>
+                        <span className="text-[16px] font-medium text-[#2A1D1B]">
+                            {formatPrice(total)}
+                        </span>
                     </div>
-                    <button
-                        type="button"
-                        disabled={!selected}
-                        onClick={onContinue}
-                        className="mt-3 flex h-[46px] w-full items-center justify-center gap-2 rounded-lg bg-[#4A6350] font-sans text-[11px] font-medium uppercase tracking-[0.18em] text-[#F6EEE4] transition-all hover:bg-[#3E5544] disabled:cursor-not-allowed disabled:opacity-50"
-                    >
-                        Continue to {nextLabel}
-                        <span aria-hidden>→</span>
-                    </button>
+
+                    <div className="mt-3 flex flex-col gap-2">
+                        {canReview && (
+                            <button
+                                type="button"
+                                onClick={onProceedToReview}
+                                className="flex h-[44px] w-full items-center justify-center gap-2 rounded-lg bg-[#2B3B2F] font-sans text-[11px] font-medium uppercase tracking-[0.16em] text-[#F6EEE4] transition-all hover:bg-[#1E2B22] shadow-sm"
+                            >
+                                <span>Review Gift Box ({selectedCount} items)</span>
+                                <span aria-hidden>→</span>
+                            </button>
+                        )}
+
+                        {currentStepIndex < STEPS.length - 1 && (
+                            <button
+                                type="button"
+                                onClick={onContinue}
+                                className={`flex h-[42px] w-full items-center justify-center gap-2 rounded-lg font-sans text-[11px] font-medium uppercase tracking-[0.16em] transition-all ${
+                                    canReview
+                                        ? "border border-[#4A6350] bg-transparent text-[#2B3B2F] hover:bg-[#4A6350]/10"
+                                        : "bg-[#4A6350] text-[#F6EEE4] hover:bg-[#3E5544]"
+                                }`}
+                            >
+                                <span>Next: {STEPS[currentStepIndex + 1].shortLabel} →</span>
+                            </button>
+                        )}
+
+                        {!canReview && (
+                            <p className="text-center font-sans text-[10px] text-[#8A483B]">
+                                Add {minProducts - selectedCount} more item{minProducts - selectedCount > 1 ? "s" : ""} to proceed to review
+                            </p>
+                        )}
+                    </div>
                 </div>
             </div>
         </aside>
@@ -343,50 +485,61 @@ function GiftSidebar({
 }
 
 function GiftReview({
-    chosen,
-    optionsByStep,
+    items,
     total,
+    selectedCount,
+    minProducts,
+    maxProducts,
     added,
     isSubmitting,
     onAddToBag,
     onCheckout,
+    onRemoveItem,
+    onGoToStep,
 }: {
-    chosen: ChosenGiftItem[];
-    optionsByStep: Record<GiftStepKey, ProductSelectionPayload | null>;
+    items: ResolvedGiftItem[];
     total: number;
+    selectedCount: number;
+    minProducts: number;
+    maxProducts: number;
     added: boolean;
     isSubmitting: boolean;
     onAddToBag: () => void;
     onCheckout: () => void;
+    onRemoveItem: (instanceId: string) => void;
+    onGoToStep: (index: number) => void;
 }) {
+    const validItems = items.filter(
+        (item): item is ResolvedGiftItem & { product: ProductView } => item.product !== null,
+    );
+    const canCheckout = selectedCount >= minProducts && selectedCount <= maxProducts;
+    const canAddMore = selectedCount < maxProducts;
+
     const comboItems = [
-        ...chosen.flatMap(({ step, product }) =>
-            product
-                ? [
-                    {
-                        key: step.key,
-                        image: product.image ?? "",
-                        name: product.title,
-                        sub: optionsByStep[step.key]?.label || product.shortDescription || "",
-                    },
-                ]
-                : [],
-        ),
+        ...validItems.map((item) => ({
+            instanceId: item.instanceId,
+            image: item.product.image ?? "",
+            name: item.product.title,
+            sub: item.options?.label || item.stepConfig.label,
+            stepIndex: STEPS.findIndex((s) => s.key === item.stepKey),
+        })),
         {
-            key: "packaging",
+            instanceId: "packaging",
             image: PACKAGING_BOX_IMAGE,
             name: "Festive Packaging",
             sub: "Seijaku gift box with a handwritten card",
+            stepIndex: -1,
         },
     ];
 
     return (
-        <div className="mx-auto mt-10 grid max-w-[1400px] grid-cols-1 gap-8 sm:mt-14 lg:grid-cols-[minmax(0,1fr)_380px] lg:gap-10">
+        <div className="mx-auto mt-8 grid max-w-[1400px] grid-cols-1 gap-8 sm:mt-12 lg:grid-cols-[minmax(0,1fr)_400px] lg:gap-10">
             <section className="min-w-0">
-                <div className="rounded-2xl border border-[#E3D4C4] bg-[#FAF4EC] p-5 sm:p-8">
+                {/* Visual Combo Presentation */}
+                <div className="rounded-2xl border border-[#E3D4C4] bg-[#FAF4EC] p-5 sm:p-8 shadow-sm">
                     <div className="flex flex-wrap items-start justify-center gap-4 sm:flex-nowrap sm:gap-2">
                         {comboItems.map((item, index) => (
-                            <Fragment key={item.key}>
+                            <Fragment key={item.instanceId}>
                                 {index > 0 && (
                                     <span
                                         aria-hidden
@@ -395,7 +548,7 @@ function GiftReview({
                                         +
                                     </span>
                                 )}
-                                <div className="w-full min-w-0 flex-1 basis-[calc(50%-0.5rem)] text-center sm:basis-0">
+                                <div className="group relative w-full min-w-0 flex-1 basis-[calc(50%-0.5rem)] text-center sm:basis-0">
                                     <span className="relative mx-auto block aspect-square w-full overflow-hidden rounded-lg bg-[#EFE5D8]">
                                         <img
                                             src={item.image}
@@ -403,17 +556,60 @@ function GiftReview({
                                             className="absolute inset-0 h-full w-full object-cover"
                                         />
                                     </span>
-                                    <p className="mt-3 text-[14px] leading-[1.25]">
+                                    <p className="mt-3 text-[14px] leading-[1.25] text-[#2A1D1B]">
                                         {item.name}
                                     </p>
-                                    <p className="mt-1 text-[11px] leading-[1.3] text-[#6B564E]">
+                                    <p className="mt-1 line-clamp-1 text-[11px] leading-[1.3] text-[#6B564E]">
                                         {item.sub}
                                     </p>
+                                    {item.stepIndex >= 0 && (
+                                        <div className="mt-2 flex items-center justify-center gap-2 font-sans text-[10px]">
+                                            <button
+                                                type="button"
+                                                onClick={() => onRemoveItem(item.instanceId)}
+                                                className="inline-flex items-center gap-1 text-[#8A483B] hover:underline"
+                                            >
+                                                <Trash2 size={11} />
+                                                <span>Remove</span>
+                                            </button>
+                                        </div>
+                                    )}
                                 </div>
                             </Fragment>
                         ))}
                     </div>
                 </div>
+
+                {/* Add more items if under max limit */}
+                {canAddMore && (
+                    <div className="mt-6 rounded-2xl border border-dashed border-[#D4C3B2] bg-[#F7EEE3]/70 p-5">
+                        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
+                            <div>
+                                <h4 className="font-serif text-[18px] text-[#2A1D1B]">
+                                    Want to add more to your gift box?
+                                </h4>
+                                <p className="font-sans text-[13px] text-[#6B564E]">
+                                    Currently {selectedCount} of {maxProducts} items selected. You can select multiple items from any category.
+                                </p>
+                            </div>
+                            <div className="flex flex-wrap gap-2">
+                                {STEPS.map((step, idx) => (
+                                    <button
+                                        key={step.key}
+                                        type="button"
+                                        onClick={() => onGoToStep(idx)}
+                                        className="inline-flex items-center gap-1.5 rounded-full border border-[#4A6350] bg-[#FAF4EC] px-3.5 py-1.5 font-sans text-[11px] font-medium text-[#2B3B2F] hover:bg-[#4A6350] hover:text-[#F6EEE4] transition-colors"
+                                    >
+                                        <Plus size={12} />
+                                        <span>Add from {step.label}</span>
+                                    </button>
+                                ))}
+                            </div>
+                        </div>
+                    </div>
+                )}
+
+                {/* Brand features */}
                 <ul className="mt-8 grid grid-cols-2 gap-4 sm:grid-cols-4">
                     {REVIEW_FEATURES.map((feature) => (
                         <li
@@ -434,69 +630,106 @@ function GiftReview({
                     ))}
                 </ul>
             </section>
+
+            {/* Order Summary & Actions */}
             <aside className="min-w-0 lg:sticky lg:top-28 lg:self-start">
-                <div className="overflow-hidden rounded-2xl border border-[#E3D4C4] bg-[#FAF4EC]">
-                    <h3 className="border-b border-[#E3D4C4] px-5 py-4 text-[17px]">
+                <div className="overflow-hidden rounded-2xl border border-[#E3D4C4] bg-[#FAF4EC] shadow-sm">
+                    <h3 className="border-b border-[#E3D4C4] px-5 py-4 text-[17px] font-normal">
                         Order Summary
                     </h3>
                     <dl className="space-y-3.5 px-5 py-5 font-sans text-[12px]">
-                        {chosen.map(
-                            ({ step, product }) =>
-                                product && (
-                                    <div
-                                        key={step.key}
-                                        className="flex items-start justify-between gap-3"
-                                    >
-                                        <img
-                                            src={product.image ?? ""}
-                                            alt={product.imageAlt ?? product.title}
-                                            className="h-12 w-12 shrink-0 rounded-md object-cover"
-                                        />
-                                        <div className="min-w-0 flex-1">
-                                            <dt className="truncate font-medium text-[#2A1D1B]">
-                                                {product.title}
-                                            </dt>
-                                            {optionsByStep[step.key]?.label ? (
-                                                <dd className="mt-0.5 truncate text-[11px] font-medium text-[#4A6350]">
-                                                    {optionsByStep[step.key]?.label}
-                                                </dd>
-                                            ) : null}
-                                        </div>
-                                        <dd className="shrink-0">
-                                            {formatPrice(product.price)}
+                        {validItems.map((item) => (
+                            <div
+                                key={item.instanceId}
+                                className="flex items-start justify-between gap-3 border-b border-[#E3D4C4]/50 pb-3 last:border-b-0 last:pb-0"
+                            >
+                                <img
+                                    src={item.product.image ?? ""}
+                                    alt={item.product.imageAlt ?? item.product.title}
+                                    className="h-12 w-12 shrink-0 rounded-md object-cover bg-[#EFE5D8]"
+                                />
+                                <div className="min-w-0 flex-1">
+                                    <dt className="truncate font-medium text-[#2A1D1B]">
+                                        {item.product.title}
+                                    </dt>
+                                    <dd className="text-[10px] text-[#8C7A6E]">
+                                        {item.stepConfig.label}
+                                    </dd>
+                                    {item.options?.label ? (
+                                        <dd className="mt-0.5 truncate text-[11px] font-medium text-[#4A6350]">
+                                            {item.options.label}
                                         </dd>
+                                    ) : null}
+                                    <div className="mt-1 flex items-center gap-2 text-[10px]">
+                                        <button
+                                            type="button"
+                                            onClick={() => onRemoveItem(item.instanceId)}
+                                            className="text-[#8A483B] underline hover:text-[#64291F]"
+                                        >
+                                            Remove
+                                        </button>
                                     </div>
-                                ),
-                        )}
+                                </div>
+                                <dd className="shrink-0 font-medium">
+                                    {formatPrice(item.product.price)}
+                                </dd>
+                            </div>
+                        ))}
+
                         <div className="flex justify-between gap-3 border-t border-[#E3D4C4] pt-3">
-                            <dt>Festive Packaging</dt>
-                            <dd className="text-[#2B3B2F]">Free</dd>
+                            <dt className="text-[#4C413A]">
+                                Festive Box & Handwritten Note
+                            </dt>
+                            <dd className="font-medium text-[#2B3B2F]">Free</dd>
                         </div>
                     </dl>
+
                     <div className="flex items-center justify-between border-t border-[#E3D4C4] px-5 py-4 font-sans text-[13px]">
                         <span>Subtotal</span>
-                        <span className="text-[18px]">{formatPrice(total)}</span>
+                        <span className="text-[18px] font-medium text-[#2A1D1B]">
+                            {formatPrice(total)}
+                        </span>
                     </div>
+
                     <div className="flex flex-col gap-2.5 px-5 pb-5">
+                        {!canCheckout && (
+                            <div className="rounded-lg border border-[#8A483B]/30 bg-[#8A483B]/10 p-3 text-center font-sans text-[11px] text-[#64291F]">
+                                <p className="font-medium">
+                                    {selectedCount < minProducts
+                                        ? `Minimum ${minProducts} items required`
+                                        : `Maximum ${maxProducts} items allowed`}
+                                </p>
+                                <p className="mt-0.5 text-[10px] text-[#7A3F33]">
+                                    Currently {selectedCount} selected.
+                                    {selectedCount < minProducts &&
+                                        ` Please add at least ${minProducts - selectedCount} more item.`}
+                                </p>
+                            </div>
+                        )}
+
                         <button
                             type="button"
                             onClick={onCheckout}
-                            disabled={isSubmitting}
-                            className="flex h-[48px] w-full items-center justify-center gap-2 rounded-lg bg-[#2B3B2F] font-sans text-[11px] font-medium uppercase tracking-[0.18em] text-[#F6EEE4] transition-all hover:bg-[#1F2C23] hover:shadow-lg disabled:cursor-not-allowed disabled:opacity-75"
+                            disabled={!canCheckout || isSubmitting}
+                            className="flex h-[48px] w-full items-center justify-center gap-2 rounded-lg bg-[#2B3B2F] font-sans text-[11px] font-medium uppercase tracking-[0.18em] text-[#F6EEE4] transition-all hover:bg-[#1F2C23] hover:shadow-lg disabled:cursor-not-allowed disabled:opacity-50"
                         >
-                            <span>{isSubmitting ? "Processing..." : "Proceed to Checkout"}</span>
+                            <span>
+                                {isSubmitting ? "Processing..." : "Proceed to Checkout"}
+                            </span>
                             <span aria-hidden>→</span>
                         </button>
+
                         <button
                             type="button"
                             onClick={onAddToBag}
-                            disabled={isSubmitting || added}
-                            className="flex h-[44px] w-full items-center justify-center gap-2 rounded-lg border border-[#2B3B2F] bg-transparent font-sans text-[11px] font-medium uppercase tracking-[0.18em] text-[#2B3B2F] transition-all hover:bg-[#2B3B2F]/5 disabled:cursor-default disabled:opacity-75"
+                            disabled={!canCheckout || isSubmitting || added}
+                            className="flex h-[44px] w-full items-center justify-center gap-2 rounded-lg border border-[#2B3B2F] bg-transparent font-sans text-[11px] font-medium uppercase tracking-[0.18em] text-[#2B3B2F] transition-all hover:bg-[#2B3B2F]/5 disabled:cursor-default disabled:opacity-50"
                         >
                             {added ? "Added to bag ✓" : "Add to bag"}
                         </button>
+
                         <p className="mt-2 text-center font-sans text-[10px] text-[#6B564E]">
-                            Usually ships in 3 to 5 working days
+                            Free delivery across India · Usually ships in 3 to 5 working days
                         </p>
                     </div>
                 </div>
@@ -507,24 +740,19 @@ function GiftReview({
 
 export default function BuildGiftClient({
     products,
+    minProducts = DEFAULT_MIN_GIFT_PRODUCTS,
+    maxProducts = DEFAULT_MAX_GIFT_PRODUCTS,
 }: {
     products: ProductView[];
+    minProducts?: number;
+    maxProducts?: number;
 }) {
     const router = useRouter();
     const { addToCart, openCart } = useShopState();
 
     const [stepIndex, setStepIndex] = useState(0);
-    const [selections, setSelections] = useState<GiftSelectionIds>({
-        ...EMPTY_GIFT_SELECTION_IDS,
-    });
-    const [optionsByStep, setOptionsByStep] = useState<
-        Record<GiftStepKey, ProductSelectionPayload | null>
-    >({
-        textile: null,
-        scent: null,
-        dokra: null,
-    });
-    const [savedSelectionsLoaded, setSavedSelectionsLoaded] = useState(false);
+    const [giftItems, setGiftItems] = useState<GiftItemSelection[]>([]);
+    const [savedLoaded, setSavedLoaded] = useState(false);
     const [added, setAdded] = useState(false);
     const [isSubmitting, setIsSubmitting] = useState(false);
 
@@ -537,70 +765,112 @@ export default function BuildGiftClient({
     );
 
     /*
-     * Hydrate the builder once from the shared gift-selection utility.
-     * Invalid/stale IDs are discarded safely.
-     *
-     * Complete saved bundles open directly on Review.
-     * Partial saved bundles open at the first missing step.
+     * Hydrate saved selections once from storage.
      */
     useEffect(() => {
-        if (savedSelectionsLoaded || products.length === 0) return;
+        if (savedLoaded || products.length === 0) return;
 
-        const stored = getGiftSelectionIds();
-        const valid = validateStoredSelections(products, stored);
+        const stored = getStoredGiftItems();
+        // Discard any items with unknown product IDs
+        const valid = stored.filter((item) => productsById.has(item.productId));
 
-        setSelections(valid);
-        setStepIndex(firstIncompleteStep(valid));
-        setSavedSelectionsLoaded(true);
-    }, [products, savedSelectionsLoaded]);
+        setGiftItems(valid);
+        if (valid.length >= minProducts && valid.length >= maxProducts) {
+            setStepIndex(STEPS.length); // Open directly on Review if full
+        }
+        setSavedLoaded(true);
+    }, [products, productsById, savedLoaded, minProducts, maxProducts]);
 
     /*
-     * Keep the draft in sync after hydration.
-     * Other pages can seed the same storage key before redirecting here.
+     * Keep storage in sync with active gift items.
      */
     useEffect(() => {
-        if (!savedSelectionsLoaded) return;
-        setGiftSelectionIds(selections);
-    }, [savedSelectionsLoaded, selections]);
+        if (!savedLoaded) return;
+        setStoredGiftItems(giftItems);
+    }, [savedLoaded, giftItems]);
 
-    const chosen: ChosenGiftItem[] = STEPS.map((giftStep) => {
-        const productId = selections[giftStep.key];
-        return {
-            step: giftStep,
-            product: productId ? productsById.get(productId) ?? null : null,
+    const selectedCount = giftItems.length;
+    const canAddMore = selectedCount < maxProducts;
+    const canAccessReview = selectedCount >= minProducts;
+
+    const countsByStep = useMemo(() => {
+        const counts: Record<GiftStepKey, number> = {
+            "scarves-and-squares": 0,
+            perfumes: 0,
+            "dokra-ornaments": 0,
+            diffusers: 0,
         };
-    });
+        for (const item of giftItems) {
+            if (counts[item.stepKey] !== undefined) {
+                counts[item.stepKey]++;
+            }
+        }
+        return counts;
+    }, [giftItems]);
 
-    const selected = isReview
-        ? null
-        : selections[step.key]
-            ? productsById.get(selections[step.key]!) ?? null
-            : null;
+    const countsByProductId = useMemo(() => {
+        const counts: Record<string, number> = {};
+        for (const item of giftItems) {
+            counts[item.productId] = (counts[item.productId] ?? 0) + 1;
+        }
+        return counts;
+    }, [giftItems]);
 
-    const total = chosen.reduce(
-        (sum, item) => sum + (item.product?.price ?? 0),
-        0,
-    );
+    const resolvedGiftItems: ResolvedGiftItem[] = useMemo(() => {
+        return giftItems.map((item) => {
+            const product = productsById.get(item.productId) ?? null;
+            const stepConfig =
+                STEPS.find((s) => s.key === item.stepKey) ?? STEPS[0];
+            return {
+                ...item,
+                product,
+                stepConfig,
+            };
+        });
+    }, [giftItems, productsById]);
 
-    const nextLabel = stepIndex < STEPS.length - 1
-        ? STEPS[stepIndex + 1].label
-        : REVIEW_LABEL;
+    const total = useMemo(() => {
+        return resolvedGiftItems.reduce(
+            (sum, item) => sum + (item.product?.price ?? 0),
+            0,
+        );
+    }, [resolvedGiftItems]);
 
     const visibleProducts = productsForStep(products, step.key);
 
-    function selectProduct(
+    function addProduct(
         product: ProductView,
         selection?: ProductSelectionPayload,
     ) {
-        if (isReview) return;
-        setSelections((current) => ({
-            ...current,
-            [step.key]: product.id,
-        }));
-        setOptionsByStep((current) => ({
-            ...current,
-            [step.key]: selection ?? null,
-        }));
+        if (giftItems.length >= maxProducts) return;
+
+        const newItem: GiftItemSelection = {
+            instanceId: generateInstanceId(),
+            productId: product.id,
+            stepKey: step.key,
+            options: selection ?? null,
+        };
+
+        setGiftItems((prev) => [...prev, newItem]);
+        setAdded(false);
+    }
+
+    function removeProductOne(product: ProductView) {
+        // Remove the most recently added instance of this product
+        setGiftItems((prev) => {
+            const lastIndex = prev
+                .map((item) => item.productId)
+                .lastIndexOf(product.id);
+            if (lastIndex === -1) return prev;
+            const next = [...prev];
+            next.splice(lastIndex, 1);
+            return next;
+        });
+        setAdded(false);
+    }
+
+    function removeItemByInstanceId(instanceId: string) {
+        setGiftItems((prev) => prev.filter((i) => i.instanceId !== instanceId));
         setAdded(false);
     }
 
@@ -612,26 +882,31 @@ export default function BuildGiftClient({
     }
 
     function continueToNextStep() {
-        if (!selected || isReview) return;
-        goTo(stepIndex + 1);
+        if (stepIndex < STEPS.length - 1) {
+            goTo(stepIndex + 1);
+        } else if (canAccessReview) {
+            goTo(STEPS.length);
+        }
     }
 
     async function persistAndAddGiftItems() {
-        const items = chosen.map(({ step: giftStep, product }) => {
-            if (!product) {
-                throw new Error(`Missing product for ${giftStep.key}`);
-            }
-            const optionPayload = optionsByStep[giftStep.key];
-            return {
-                type: giftStep.key,
-                id: product.id,
-                slug: product.slug,
-                name: product.title,
-                price: product.price,
-                variantLabel: optionPayload?.label,
-                selectedOptions: optionPayload?.options,
-            };
-        });
+        const validItems = resolvedGiftItems.filter(
+            (item): item is ResolvedGiftItem & { product: ProductView } => item.product !== null,
+        );
+
+        if (validItems.length < minProducts) {
+            throw new Error(`Minimum ${minProducts} products required for a gift.`);
+        }
+
+        const items = validItems.map(({ stepConfig, product, options }) => ({
+            type: stepConfig.key,
+            id: product.id,
+            slug: product.slug,
+            name: product.title,
+            price: product.price,
+            variantLabel: options?.label,
+            selectedOptions: options?.options,
+        }));
 
         try {
             localStorage.setItem(
@@ -642,32 +917,29 @@ export default function BuildGiftClient({
             // Optional local cache
         }
 
-        // Add each chosen gift object to the active cart with its selected options
-        for (const item of chosen) {
-            if (item.product) {
-                const optionPayload = optionsByStep[item.step.key];
-                addToCart(
-                    {
-                        productSlug: item.product.slug,
-                        title: item.product.title,
-                        unitPrice: item.product.price,
-                        priceLabel: item.product.priceLabel,
-                        quantity: 1,
-                        image: item.product.image,
-                        shortDescription: item.product.shortDescription,
-                        variantLabel: optionPayload?.label || null,
-                        selectedOptions: optionPayload?.options || null,
-                    },
-                    { openDrawer: false },
-                );
-            }
+        // Add each chosen gift object to the cart with its selected options
+        for (const item of validItems) {
+            addToCart(
+                {
+                    productSlug: item.product.slug,
+                    title: item.product.title,
+                    unitPrice: item.product.price,
+                    priceLabel: item.product.priceLabel,
+                    quantity: 1,
+                    image: item.product.image,
+                    shortDescription: item.product.shortDescription,
+                    variantLabel: item.options?.label || null,
+                    selectedOptions: item.options?.options || null,
+                },
+                { openDrawer: false },
+            );
         }
 
-        clearGiftSelectionIds();
+        clearStoredGiftItems();
     }
 
     async function addToBag() {
-        if (chosen.some(({ product }) => !product)) return;
+        if (!canAccessReview) return;
         setIsSubmitting(true);
         try {
             await persistAndAddGiftItems();
@@ -681,7 +953,7 @@ export default function BuildGiftClient({
     }
 
     async function proceedToCheckout() {
-        if (chosen.some(({ product }) => !product)) return;
+        if (!canAccessReview) return;
         setIsSubmitting(true);
         try {
             await persistAndAddGiftItems();
@@ -695,44 +967,65 @@ export default function BuildGiftClient({
 
     return (
         <main
-            className="min-h-screen w-full bg-[#F7EFE5] px-4 pb-16 pt-24 text-[#2A1D1B] sm:px-6 sm:pt-28 lg:px-10 lg:pt-28"
+            className="min-h-screen w-full bg-[#F7EFE5] px-4 pb-16 pt-24 text-[#2A1D1B] sm:px-6 sm:pt-28 lg:px-10 lg:pt-28 mt-8"
             style={{
                 fontFamily: "'EB Garamond', 'Cormorant Garamond', Georgia, serif",
             }}
         >
-            <Stepper current={stepIndex} onGo={goTo} />
+            <Stepper
+                current={stepIndex}
+                countsByStep={countsByStep}
+                canAccessReview={canAccessReview}
+                onGo={goTo}
+            />
+
             <GiftHeader
                 isReview={isReview}
                 stepIndex={stepIndex}
                 step={step}
+                selectedCount={selectedCount}
+                minProducts={minProducts}
+                maxProducts={maxProducts}
             />
+
             {isReview ? (
                 <GiftReview
-                    chosen={chosen}
-                    optionsByStep={optionsByStep}
+                    items={resolvedGiftItems}
                     total={total}
+                    selectedCount={selectedCount}
+                    minProducts={minProducts}
+                    maxProducts={maxProducts}
                     added={added}
                     isSubmitting={isSubmitting}
                     onAddToBag={addToBag}
                     onCheckout={proceedToCheckout}
+                    onRemoveItem={removeItemByInstanceId}
+                    onGoToStep={goTo}
                 />
             ) : (
-                <div className="mx-auto mt-10 grid max-w-[1400px] grid-cols-1 gap-8 sm:mt-12 lg:grid-cols-[minmax(0,1fr)_360px] lg:gap-10">
+                <div className="mx-auto mt-8 grid max-w-[1640px] grid-cols-1 gap-8 sm:mt-12 lg:grid-cols-[minmax(0,1fr)_360px] lg:gap-8 xl:gap-10">
                     <section className="min-w-0">
                         <ProductDrawer
                             key={step.key}
                             products={visibleProducts}
-                            selectedGiftProductId={selected?.id ?? null}
-                            onSelect={selectProduct}
+                            selectedCountsByProductId={countsByProductId}
+                            canAddMore={canAddMore}
+                            onAddProduct={addProduct}
+                            onRemoveProduct={removeProductOne}
                         />
                     </section>
+
                     <GiftSidebar
-                        chosen={chosen}
-                        optionsByStep={optionsByStep}
-                        selected={selected}
+                        items={resolvedGiftItems}
+                        currentStepIndex={stepIndex}
+                        selectedCount={selectedCount}
+                        minProducts={minProducts}
+                        maxProducts={maxProducts}
                         total={total}
-                        nextLabel={nextLabel}
                         onContinue={continueToNextStep}
+                        onGoToStep={goTo}
+                        onRemoveItem={removeItemByInstanceId}
+                        onProceedToReview={() => goTo(STEPS.length)}
                     />
                 </div>
             )}
