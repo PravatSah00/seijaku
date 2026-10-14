@@ -4,7 +4,7 @@ import Image from "next/image";
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import { useEffect, useMemo, useState, useTransition } from "react";
-import { ShoppingBag, ArrowLeft, ShieldCheck } from "lucide-react";
+import { ShoppingBag, ArrowLeft, ShieldCheck, Gift } from "lucide-react";
 
 import { loadRazorpayCheckout, type RazorpayPaymentResponse } from "@/src/lib/razorpay";
 import { canonicalShopRoutes } from "@/src/lib/shop-routes";
@@ -13,6 +13,12 @@ import {
   type BackendProduct,
   type ProductView,
 } from "@/src/lib/product-types";
+import {
+  getGiftCheckoutBundle,
+  clearGiftCheckoutBundle,
+  clearStoredGiftItems,
+  type GiftCheckoutBundle,
+} from "@/src/app/build-gift/utils";
 
 import { useShopState } from "./ShopStateProvider";
 
@@ -34,6 +40,7 @@ type CheckoutLineItem = {
   shortDescription?: string;
   variantLabel?: string | null;
   selectedOptions?: Record<string, string> | null;
+  categoryName?: string;
   weightGrams?: number | null;
   lengthCm?: number | null;
   breadthCm?: number | null;
@@ -52,10 +59,26 @@ export default function CheckoutPageClient() {
     clearCheckout,
   } = useShopState();
 
+  const isGiftParam = searchParams.get("gift") === "true";
+  const [giftBundle, setGiftBundle] = useState<GiftCheckoutBundle | null>(null);
+  const [giftNote, setGiftNote] = useState<string>("");
+
+  useEffect(() => {
+    const bundle = getGiftCheckoutBundle();
+    if (bundle && (isGiftParam || (!searchParams.get("item") && !checkoutItemSlug))) {
+      setGiftBundle(bundle);
+    }
+  }, [isGiftParam, searchParams, checkoutItemSlug]);
+
+  const isGiftMode = Boolean(isGiftParam || (giftBundle && giftBundle.items.length > 0 && !searchParams.get("item")));
+
   const querySlug = searchParams.get("item");
   const activeSlug = useMemo(
-    () => (querySlug && querySlug.length > 0 ? querySlug : checkoutItemSlug),
-    [querySlug, checkoutItemSlug],
+    () => {
+      if (isGiftMode) return null;
+      return querySlug && querySlug.length > 0 ? querySlug : checkoutItemSlug;
+    },
+    [isGiftMode, querySlug, checkoutItemSlug],
   );
 
   const [singleItem, setSingleItem] = useState<ProductView | null>(null);
@@ -122,8 +145,11 @@ export default function CheckoutPageClient() {
     return checkoutVariantLabel;
   }, [selectedOptionsState, checkoutVariantLabel]);
 
-  // Determine line items for checkout (either single item or full cart)
+  // Determine line items for checkout (gift bundle, single item, or full cart)
   const lineItems = useMemo<CheckoutLineItem[]>(() => {
+    if (isGiftMode && giftBundle && giftBundle.items.length > 0) {
+      return giftBundle.items;
+    }
     if (singleItem) {
       let unitPrice = singleItem.price;
       if (singleItem.customizationOptions) {
@@ -160,7 +186,7 @@ export default function CheckoutPageClient() {
       return cart;
     }
     return [];
-  }, [singleItem, activeVariantLabel, selectedOptionsState, cart]);
+  }, [isGiftMode, giftBundle, singleItem, activeVariantLabel, selectedOptionsState, cart]);
 
   const itemsSubtotal = useMemo(
     () => lineItems.reduce((sum, item) => sum + item.unitPrice * item.quantity, 0),
@@ -288,23 +314,50 @@ export default function CheckoutPageClient() {
           <div className="space-y-6">
             <div className="rounded-[30px] border border-[#d8cec1] bg-[#faf7f1] p-8 sm:p-10">
               <div className="flex items-center justify-between">
-                <p className="text-[10px] uppercase tracking-[0.28em] text-[#9a785d]">Direct Checkout</p>
+                {isGiftMode ? (
+                  <span className="inline-flex items-center gap-1.5 rounded-full bg-[#2e4a36]/10 px-3 py-1 text-[10px] uppercase tracking-[0.22em] font-medium text-[#2e4a36]">
+                    <Gift size={12} />
+                    <span>Curated Gift Box Order</span>
+                  </span>
+                ) : (
+                  <p className="text-[10px] uppercase tracking-[0.28em] text-[#9a785d]">Direct Checkout</p>
+                )}
                 <Link
-                  href={canonicalShopRoutes.cart}
+                  href={isGiftMode ? "/build-gift" : canonicalShopRoutes.cart}
                   className="inline-flex items-center gap-1 text-[11px] font-medium uppercase tracking-[0.16em] text-[#7a6448] hover:underline"
                 >
                   <ArrowLeft size={12} />
-                  <span>Modify Bag</span>
+                  <span>{isGiftMode ? "Modify Gift Box" : "Modify Bag"}</span>
                 </Link>
               </div>
               <h1 className="mt-4 max-w-[14ch] text-[clamp(34px,3.8vw,48px)] leading-[1.06] tracking-[-0.025em] text-[#1d1a17]">
-                Complete your Seijaku order.
+                {isGiftMode ? "Complete your Seijaku Gift Box." : "Complete your Seijaku order."}
               </h1>
               <p className="mt-4 max-w-[46ch] text-[14px] leading-[1.8] text-[#5f584f]">
-                {lineItems.length === 1
-                  ? "Your selected object is held here ready for swift, secure completion."
-                  : `Reviewing ${lineItems.length} items from your shopping bag.`}
+                {isGiftMode
+                  ? `Reviewing your ${lineItems.length} curated objects. All items will be beautifully packaged together in our festive gift box with a complimentary handwritten card.`
+                  : lineItems.length === 1
+                    ? "Your selected object is held here ready for swift, secure completion."
+                    : `Reviewing ${lineItems.length} items from your shopping bag.`}
               </p>
+
+              {isGiftMode && (
+                <div className="mt-6 rounded-[22px] border border-[#2e4a36]/20 bg-[#eef5f0] p-4 sm:p-5">
+                  <div className="flex items-start gap-3.5">
+                    <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-[#2e4a36] text-[#faf7f1]">
+                      <Gift size={20} />
+                    </div>
+                    <div>
+                      <p className="font-serif text-[16px] font-medium text-[#1d1a17]">
+                        Festive Gift Packaging & Handwritten Card Included
+                      </p>
+                      <p className="mt-1 text-[12px] leading-[1.65] text-[#4b5849]">
+                        Every product in this bundle will be nestled in a premium Seijaku gift box. You can include a custom message for your recipient in the gift card section on the right.
+                      </p>
+                    </div>
+                  </div>
+                </div>
+              )}
 
               {/* Line Items List */}
               <div className="mt-8 space-y-4">
@@ -341,6 +394,12 @@ export default function CheckoutPageClient() {
                           INR {(line.unitPrice * line.quantity).toLocaleString("en-IN")}
                         </p>
                       </div>
+
+                      {line.categoryName && (
+                        <span className="mt-1.5 inline-block rounded-full bg-[#2e4a36]/10 px-2.5 py-0.5 text-[10px] font-medium text-[#2e4a36]">
+                          Gift Box · {line.categoryName}
+                        </span>
+                      )}
 
                       {line.variantLabel && (
                         <p className="mt-1 text-[12px] text-[#655b4f]">
@@ -458,6 +517,13 @@ export default function CheckoutPageClient() {
                 </div>
               </div>
 
+              {isGiftMode && (
+                <div className="flex items-center justify-between gap-4 text-[13px]">
+                  <span className="text-[#3b342e]">Festive Gift Box & Handwritten Card</span>
+                  <span className="font-medium text-[#2e4a36]">Free (Complimentary)</span>
+                </div>
+              )}
+
               <div className="flex items-center justify-between gap-4">
                 <span>Shipping Charges</span>
                 <span>
@@ -555,6 +621,21 @@ export default function CheckoutPageClient() {
                     className="w-full rounded-[18px] border border-[#cfc3b4] bg-[#ece5d9] px-4 py-3 text-[14px] text-[#736a5f] outline-none"
                   />
                 </div>
+                {isGiftMode && (
+                  <div>
+                    <label className="mb-1.5 flex items-center gap-1.5 text-[10px] font-semibold uppercase tracking-[0.2em] text-[#8d7d6d]">
+                      <Gift size={12} className="text-[#2e4a36]" />
+                      <span>Handwritten Card Message (Optional)</span>
+                    </label>
+                    <textarea
+                      rows={2}
+                      placeholder="Message to be handwritten on the gift card for your recipient..."
+                      value={giftNote}
+                      onChange={(event) => setGiftNote(event.target.value)}
+                      className="w-full rounded-[18px] border border-[#cfc3b4] bg-[#faf7f1] px-4 py-3 text-[13px] leading-[1.7] text-[#2f2924] outline-none focus:border-[#2e4a36] focus:ring-2 focus:ring-[#2e4a36]/15"
+                    />
+                  </div>
+                )}
                 <textarea
                   rows={3}
                   placeholder="Notes or special delivery instructions (optional)..."
@@ -602,6 +683,37 @@ export default function CheckoutPageClient() {
                       }
                     }
 
+                    const formattedNotes = isGiftMode
+                      ? [
+                          `[Seijaku Curated Gift Box - ${lineItems.length} Products in Festive Packaging]`,
+                          giftNote.trim() ? `Recipient Gift Message: "${giftNote.trim()}"` : `Recipient Gift Message: None requested`,
+                          notes.trim() ? `Delivery Instructions: ${notes.trim()}` : "",
+                        ]
+                          .filter(Boolean)
+                          .join("\n")
+                      : notes.trim() || undefined;
+
+                    const orderItemsPayload = lineItems.map((item) => {
+                      const selectedOptions = isGiftMode
+                        ? {
+                            ...(item.selectedOptions ?? {}),
+                            "Gift Packaging": "Festive Gift Box",
+                            ...(item.categoryName ? { "Gift Category": item.categoryName } : {}),
+                          }
+                        : item.selectedOptions ?? undefined;
+
+                      const variantSummary = isGiftMode
+                        ? item.variantLabel || (item.categoryName ? `[Gift Box · ${item.categoryName}]` : "[Gift Box Item]")
+                        : item.variantLabel ?? undefined;
+
+                      return {
+                        productSlug: item.productSlug,
+                        quantity: item.quantity,
+                        selectedOptions,
+                        variantSummary,
+                      };
+                    });
+
                     // 1. Create the Razorpay order on our backend.
                     let orderRes: Response;
                     try {
@@ -612,20 +724,15 @@ export default function CheckoutPageClient() {
                           name,
                           email,
                           phone,
-                          notes,
-                          source: "frontend-checkout",
+                          notes: formattedNotes,
+                          source: isGiftMode ? "frontend-gift-checkout" : "frontend-checkout",
                           shippingLine1,
                           shippingLine2: shippingLine2 || undefined,
                           shippingCity,
                           shippingState,
                           shippingPincode,
                           shippingCountry: "IN",
-                          items: lineItems.map((item) => ({
-                            productSlug: item.productSlug,
-                            quantity: item.quantity,
-                            selectedOptions: item.selectedOptions ?? undefined,
-                            variantSummary: item.variantLabel ?? undefined,
-                          })),
+                          items: orderItemsPayload,
                         }),
                       });
                     } catch {
@@ -656,7 +763,11 @@ export default function CheckoutPageClient() {
                       amount: order.amount,
                       currency: order.currency,
                       name: "Seijaku",
-                      description: lineItems.length === 1 ? lineItems[0].title : `Seijaku Order (${lineItems.length} items)`,
+                      description: isGiftMode
+                        ? `Seijaku Gift Box (${lineItems.length} products in festive packaging)`
+                        : lineItems.length === 1
+                          ? lineItems[0].title
+                          : `Seijaku Order (${lineItems.length} items)`,
                       prefill: { name, email, contact: phone },
                       theme: { color: "#2e4a36" },
                       handler: async (response: RazorpayPaymentResponse) => {
@@ -667,18 +778,23 @@ export default function CheckoutPageClient() {
                             body: JSON.stringify(response),
                           });
                           if (verifyRes.ok) {
+                            if (isGiftMode) {
+                              clearGiftCheckoutBundle();
+                              clearStoredGiftItems();
+                            }
                             clearCheckout();
                             clearCart();
                             setName("");
                             setEmail("");
                             setPhone("");
                             setNotes("");
+                            setGiftNote("");
                             setShippingLine1("");
                             setShippingLine2("");
                             setShippingCity("");
                             setShippingState("");
                             setShippingPincode("");
-                            router.push(`/checkout/order-confirmed?order=${order.orderId}`);
+                            router.push(`/checkout/order-confirmed?order=${order.orderId}${isGiftMode ? "&gift=true" : ""}`);
                           } else {
                             setError(
                               "Payment was received but verification failed. If you were charged, our team will reconcile via webhook within minutes — you'll receive an email.",

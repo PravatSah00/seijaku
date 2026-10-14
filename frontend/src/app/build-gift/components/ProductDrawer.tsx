@@ -21,6 +21,7 @@ import CompactProductCard from "./CompactProductCard";
 import ProductDetailDrawer from "./ProductDetailDrawer";
 import ShopFilterDrawer from "./ShopFilterDrawer";
 import ShopFilterRail from "./ShopFilterRail";
+import type { ProductSelectionPayload } from "../utils";
 
 const INITIAL_BATCH_SIZE = 8;
 const LOAD_MORE_STEP = 8;
@@ -61,14 +62,18 @@ function sortProducts(items: ProductView[], sortBy: ShopSortOption) {
 
 type ProductDrawerProps = {
     products: ProductView[];
-    selectedGiftProductId: string | null;
-    onSelect: (product: ProductView, selection?: { label?: string | null; options?: Record<string, string> | null }) => void;
+    selectedCountsByProductId: Record<string, number>;
+    canAddMore: boolean;
+    onAddProduct: (product: ProductView, selection?: ProductSelectionPayload) => void;
+    onRemoveProduct: (product: ProductView) => void;
 };
 
 export default function ProductDrawer({
     products,
-    selectedGiftProductId,
-    onSelect,
+    selectedCountsByProductId,
+    canAddMore,
+    onAddProduct,
+    onRemoveProduct,
 }: ProductDrawerProps) {
     const pathname = usePathname();
     const router = useRouter();
@@ -212,20 +217,19 @@ export default function ProductDrawer({
         hasActiveFilters,
     };
 
-    const gridColumns = isRailCollapsed
-        ? "grid gap-5 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4"
-        : "grid gap-5 sm:grid-cols-2 lg:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-4";
+    const gridColumns =
+        "grid gap-5 grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-3 2xl:grid-cols-3";
 
     return (
         <>
-            <main className="min-h-screen bg-[#f3efe7] pt-[25px] text-[#3a3a3a]">
-                <section className="pb-20 sm:pb-24">
-                    <div className="page-container max-w-[1240px]">
+            <div className="w-full text-[#3a3a3a]">
+                <section className="pb-16 sm:pb-20">
+                    <div className="w-full">
                         <div
-                            className={`grid gap-8 ${
+                            className={`grid gap-6 ${
                                 isRailCollapsed
                                     ? "lg:grid-cols-1"
-                                    : "lg:grid-cols-[280px_minmax(0,1fr)] lg:gap-10 xl:gap-12"
+                                    : "lg:grid-cols-[240px_minmax(0,1fr)] lg:gap-8"
                             }`}
                         >
                             {!isRailCollapsed && (
@@ -300,18 +304,31 @@ export default function ProductDrawer({
                                 ) : (
                                     <>
                                         <div className={`mt-8 ${gridColumns}`}>
-                                            {visibleProducts.map((product) => (
-                                                <CompactProductCard
-                                                    key={product.id}
-                                                    item={product}
-                                                    isGiftSelected={
-                                                        selectedGiftProductId ===
+                                            {visibleProducts.map((product) => {
+                                                const countForProduct =
+                                                    selectedCountsByProductId[
                                                         product.id
-                                                    }
-                                                    onGiftSelect={onSelect}
-                                                    onViewDetails={updateQuery}
-                                                />
-                                            ))}
+                                                    ] ?? 0;
+                                                return (
+                                                    <CompactProductCard
+                                                        key={product.id}
+                                                        item={product}
+                                                        selectedCountForProduct={
+                                                            countForProduct
+                                                        }
+                                                        canAddMore={canAddMore}
+                                                        onAddGiftProduct={
+                                                            onAddProduct
+                                                        }
+                                                        onRemoveGiftProduct={
+                                                            onRemoveProduct
+                                                        }
+                                                        onViewDetails={
+                                                            updateQuery
+                                                        }
+                                                    />
+                                                );
+                                            })}
                                         </div>
 
                                         {hasMore && (
@@ -320,7 +337,7 @@ export default function ProductDrawer({
                                                     type="button"
                                                     onClick={() =>
                                                         setVisibleCount(
-                                                            (count) =>
+                                                             (count) =>
                                                                 count +
                                                                 LOAD_MORE_STEP,
                                                         )
@@ -337,7 +354,7 @@ export default function ProductDrawer({
                         </div>
                     </div>
                 </section>
-            </main>
+            </div>
 
             <ShopFilterDrawer
                 isOpen={isFilterDrawerOpen}
@@ -349,7 +366,14 @@ export default function ProductDrawer({
                 item={detailProduct}
                 isOpen={Boolean(detailProduct)}
                 onClose={() => updateQuery()}
-                onSelectGiftProduct={onSelect}
+                selectedCountForProduct={
+                    detailProduct
+                        ? (selectedCountsByProductId[detailProduct.id] ?? 0)
+                        : 0
+                }
+                canAddMore={canAddMore}
+                onAddGiftProduct={onAddProduct}
+                onRemoveGiftProduct={onRemoveProduct}
             />
         </>
     );

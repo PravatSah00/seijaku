@@ -8,17 +8,29 @@ import { Sparkles } from "lucide-react";
 
 import { getShopProductUseCase, hasVariantSelector, type ProductView } from "@/src/lib/product-types";
 import { canonicalShopRoutes } from "@/src/lib/shop-routes";
+import type { ProductSelectionPayload } from "../utils";
 
 type ProductDetailDrawerProps = {
   item: ProductView | null;
   isOpen: boolean;
   onClose: () => void;
-  onSelectGiftProduct?: (product: ProductView, selection?: { label?: string | null; options?: Record<string, string> | null }) => void;
+  selectedCountForProduct?: number;
+  canAddMore?: boolean;
+  onAddGiftProduct?: (product: ProductView, selection?: ProductSelectionPayload) => void;
+  onRemoveGiftProduct?: (product: ProductView) => void;
 };
 
 const ENRICHMENT_TIMEOUT_MS = 8_000;
 
-export default function ProductDetailDrawer({ item, isOpen, onClose, onSelectGiftProduct }: ProductDetailDrawerProps) {
+export default function ProductDetailDrawer({
+  item,
+  isOpen,
+  onClose,
+  selectedCountForProduct = 0,
+  canAddMore = true,
+  onAddGiftProduct,
+  onRemoveGiftProduct,
+}: ProductDetailDrawerProps) {
   const [activeMedia, setActiveMedia] = useState<number | null>(null);
   const [selectedOptions, setSelectedOptions] = useState<Record<string, string>>({});
   const [enrichedVideoUrl, setEnrichedVideoUrl] = useState<string | null>(null);
@@ -32,9 +44,8 @@ export default function ProductDetailDrawer({ item, isOpen, onClose, onSelectGif
   const allRequiredSelected = customizationOptions.length === 0 || customizationOptions
     .every((option) => Boolean(selectedOptions[option.label]));
   const selectionLabel = Object.values(selectedOptions).filter(Boolean).join(" · ");
-  // Prefer a hand-maintained videoUrl from the registry (so editors can
-  // override), fall back to whatever the backend currently has attached.
   const resolvedVideoUrl = item?.videoUrl || enrichedVideoUrl || null;
+  const isAlreadyInGift = selectedCountForProduct > 0;
 
   useEffect(() => {
     if (!isOpen) {
@@ -48,8 +59,6 @@ export default function ProductDetailDrawer({ item, isOpen, onClose, onSelectGif
     };
   }, [isOpen]);
 
-  // Reset variant choices whenever the drawer closes OR the product changes
-  // — reopening a drawer should always start from a clean selection.
   useEffect(() => {
     setShowFullDesc(false);
     if (!isOpen) {
@@ -58,13 +67,6 @@ export default function ProductDetailDrawer({ item, isOpen, onClose, onSelectGif
     }
   }, [isOpen, item?.slug]);
 
-  // Lazy video enrichment: when the drawer opens for a product, fetch the
-  // matching backend record and pick up any VIDEO-kind media attached there.
-  // Hand-maintained `item.videoUrl` wins when present; otherwise we fall back
-  // to whatever the backend has.
-  //
-  // Contract: single attempt, 8s abort, silent fallback to image-only on any
-  // failure. Hand-maintained `item.videoUrl` still wins — see resolvedVideoUrl.
   useEffect(() => {
     if (!isOpen || !item?.slug) {
       setEnrichedVideoUrl(null);
@@ -92,7 +94,6 @@ export default function ProductDetailDrawer({ item, isOpen, onClose, onSelectGif
           (entry) => entry?.asset?.kind === "VIDEO" && Boolean(entry?.asset?.url),
         );
 
-        // Guard against stale responses if the user switched products mid-fetch.
         if (videoAsset?.asset?.url && slugAtFetch === item.slug) {
           setEnrichedVideoUrl(videoAsset.asset.url);
         }
@@ -100,219 +101,227 @@ export default function ProductDetailDrawer({ item, isOpen, onClose, onSelectGif
         if ((error as Error)?.name === "AbortError") {
           return;
         }
-        console.warn("[drawer] video enrichment failed", error);
+      } finally {
+        window.clearTimeout(timeoutId);
       }
     })();
 
     return () => {
       window.clearTimeout(timeoutId);
       controller.abort();
-      setEnrichedVideoUrl(null);
     };
   }, [isOpen, item?.slug]);
 
-  const hasLongDesc = Boolean(item?.longDescription);
-  const hasShortDesc = Boolean(item?.shortDescription);
-  const isDescriptionTruncated = hasLongDesc && !hasShortDesc && (item?.longDescription?.length ?? 0) > 200;
-  const canToggleDescription = hasLongDesc && (hasShortDesc || isDescriptionTruncated);
-
-  let displayedDescription = "Detailed product notes will appear here as the catalog evolves.";
-  if (item) {
-    if (showFullDesc) {
-      displayedDescription = item.longDescription ?? item.shortDescription ?? displayedDescription;
-    } else {
-      if (item.shortDescription) {
-        displayedDescription = item.shortDescription;
-      } else if (isDescriptionTruncated && item.longDescription) {
-        displayedDescription = `${item.longDescription.slice(0, 200).trim()}...`;
-      } else {
-        displayedDescription = item.longDescription ?? displayedDescription;
-      }
-    }
-  }
-
-  if (!item) {
+  if (!isOpen || !item) {
     return null;
   }
 
   return (
-    <div
-      className={`fixed inset-0 z-[70] transition-opacity duration-300 ${
-        isOpen ? "pointer-events-auto opacity-100" : "pointer-events-none opacity-0"
-      }`}
-      aria-hidden={!isOpen}
-    >
-      <button type="button" aria-label="Close details" className="absolute inset-0 bg-[rgba(21,18,15,0.36)]" onClick={onClose} />
+    <div className="fixed inset-0 z-50 flex justify-end">
+      <div
+        className="fixed inset-0 bg-[#1f1a16]/45 backdrop-blur-sm transition-opacity"
+        onClick={onClose}
+        aria-hidden="true"
+      />
 
-      <aside className={`absolute inset-x-0 bottom-0 top-auto h-[88vh] w-full overflow-y-auto rounded-t-[28px] bg-[#f6f1e8] shadow-[0_-18px_40px_rgba(27,23,19,0.14)] transition-transform duration-300 md:inset-y-0 md:left-auto md:right-0 md:top-0 md:h-full md:max-w-[720px] md:rounded-none md:shadow-[-20px_0_45px_rgba(27,23,19,0.16)] ${isOpen ? "translate-y-0 md:translate-x-0" : "translate-y-full md:translate-x-full md:translate-y-0"}`}>
-        <div className="flex items-center justify-between border-b border-black/6 px-5 py-4 sm:px-7">
-          <div>
-            <p className="text-[10px] uppercase tracking-[0.22em] text-[#8f7a65]">{item.material ?? "Seijaku Object"}</p>
-            <p className="mt-2 font-serif text-[24px] leading-[1.1] tracking-[-0.02em] text-[#1f1a16]">{item.title}</p>
-          </div>
-          <button type="button" onClick={onClose} className="text-[11px] uppercase tracking-[0.18em] text-[#5b5247]">
-            Close
+      <aside
+        role="dialog"
+        aria-modal="true"
+        aria-label={item.title}
+        className="relative z-10 flex h-full w-full max-w-[620px] flex-col bg-[#FAF4EC] shadow-2xl overflow-y-auto"
+      >
+        <div className="sticky top-0 z-20 flex items-center justify-between border-b border-[#E3D4C4] bg-[#FAF4EC]/95 px-6 py-4 backdrop-blur-md">
+          <span className="font-sans text-[11px] uppercase tracking-[0.22em] text-[#8C7A6E]">
+            {item.type} {useCase ? `· ${useCase}` : ""}
+          </span>
+          <button
+            type="button"
+            onClick={onClose}
+            className="flex h-8 w-8 items-center justify-center rounded-full text-[#5F5448] hover:bg-[#EFE3D3] transition-colors"
+            aria-label="Close details"
+          >
+            ✕
           </button>
         </div>
 
-        <div className="p-5 sm:p-7">
-          <div className="relative aspect-[4/4.3] overflow-hidden rounded-[26px] bg-[#ddd1c1]">
-            {resolvedVideoUrl ? (
-              <video className="h-full w-full object-cover" controls playsInline poster={activeImage}>
-                <source src={resolvedVideoUrl} />
-              </video>
-            ) : activeImage ? (
-              <Image src={activeImage} alt={item.imageAlt ?? item.title} fill sizes="(min-width: 768px) 48vw, 100vw" className="object-cover" />
-            ) : null}
+        <div className="p-6 sm:p-8 space-y-6">
+          <div className="relative aspect-[4/3] w-full overflow-hidden rounded-xl bg-[#EFE5D8]">
+            {resolvedVideoUrl && activeIndex === 0 ? (
+              <video
+                src={resolvedVideoUrl}
+                controls
+                playsInline
+                className="h-full w-full object-cover"
+              />
+            ) : (
+              <Image
+                src={activeImage || "/images/Home Page hero image 1.png"}
+                alt={item.imageAlt ?? item.title}
+                fill
+                sizes="(min-width: 640px) 560px, 100vw"
+                className="object-cover"
+              />
+            )}
           </div>
 
-          {gallery.length > 1 ? (
-            <div className="mt-4 grid grid-cols-3 gap-3">
-              {gallery.map((image, index) => (
+          {gallery.length > 1 && (
+            <div className="flex gap-2 overflow-x-auto pb-1">
+              {gallery.map((img, idx) => (
                 <button
-                  key={`${item.slug}-${image}`}
+                  key={img}
                   type="button"
-                  onClick={() => setActiveMedia(index)}
-                  className={`relative aspect-[4/3] overflow-hidden rounded-[18px] border ${activeIndex === index ? "border-[#2e4a36]" : "border-[#d8cec1]"}`}
+                  onClick={() => setActiveMedia(idx)}
+                  className={`relative h-16 w-16 shrink-0 overflow-hidden rounded-lg border-2 transition-all ${
+                    activeIndex === idx
+                      ? "border-[#4A6350]"
+                      : "border-transparent opacity-70 hover:opacity-100"
+                  }`}
                 >
-                  <Image src={image} alt={item.imageAlt ? `${item.imageAlt} View ${index + 1}` : `${item.title} view ${index + 1}`} fill sizes="30vw" className="object-cover" />
+                  <Image
+                    src={img}
+                    alt=""
+                    fill
+                    sizes="64px"
+                    className="object-cover"
+                  />
                 </button>
               ))}
             </div>
-          ) : null}
+          )}
 
-          <div className="mt-8 grid gap-8 md:grid-cols-[0.85fr_1.15fr] md:items-start">
-            <div>
-              <p className="text-[10px] uppercase tracking-[0.22em] text-[#8f7a65]">Type</p>
-              <p className="mt-2 text-[14px] leading-[1.8] text-[#5f5850]">{item.type}</p>
-              <p className="mt-5 text-[10px] uppercase tracking-[0.22em] text-[#8f7a65]">Material</p>
-              <p className="mt-2 text-[14px] leading-[1.8] text-[#5f5850]">{item.material ?? "Not specified"}</p>
-              {useCase ? (
-                <>
-                  <p className="mt-5 text-[10px] uppercase tracking-[0.22em] text-[#8f7a65]">Use Case</p>
-                  <p className="mt-2 text-[14px] leading-[1.8] text-[#5f5850]">{useCase}</p>
-                </>
-              ) : null}
-              <p className="mt-5 text-[10px] uppercase tracking-[0.22em] text-[#8f7a65]">Price</p>
-              <p className="mt-2 text-[18px] text-[#2f2924]">{item.priceLabel}</p>
-              {item.status ? (
-                <>
-                  <p className="mt-5 text-[10px] uppercase tracking-[0.22em] text-[#8f7a65]">Status</p>
-                  <p className="mt-2 text-[14px] leading-[1.8] text-[#5f5850]">{item.status}</p>
-                </>
-              ) : null}
+          <div>
+            <div className="flex items-baseline justify-between gap-4">
+              <h2 className="font-serif text-[26px] sm:text-[30px] leading-tight text-[#1F1A16]">
+                {item.title}
+              </h2>
+              <span className="font-sans text-[18px] font-medium text-[#2A1D1B] shrink-0">
+                {item.priceLabel}
+              </span>
             </div>
 
-            <div>
-              <div className="text-[15px] leading-[1.85] text-[#5f5850] [&_p]:mt-3 [&_p]:first:mt-0 [&_h3]:mt-6 [&_h3]:font-serif [&_h3]:text-[18px] [&_h3]:leading-[1.3] [&_h3]:text-[#1c1c1c] [&_h3]:first:mt-0 [&_ul]:mt-3 [&_ul]:pl-5 [&_ul]:list-disc [&_ul]:marker:text-[#8f7a65] [&_ol]:mt-3 [&_ol]:pl-5 [&_ol]:list-decimal [&_ol]:marker:text-[#8f7a65] [&_li]:mt-1 [&_a]:text-[#2e4a36] [&_a]:underline [&_a]:underline-offset-4 hover:[&_a]:text-[#243c2c] [&_strong]:font-semibold [&_strong]:text-[#1c1c1c] [&_em]:italic">
-                <ReactMarkdown>{displayedDescription}</ReactMarkdown>
+            {isAlreadyInGift && (
+              <div className="mt-2 inline-flex items-center gap-1.5 rounded-full bg-[#4A6350]/15 px-3 py-1 font-sans text-[11px] font-medium text-[#2B3B2F]">
+                <span>✓ Currently in Gift Box: {selectedCountForProduct}</span>
               </div>
-              {canToggleDescription ? (
+            )}
+
+            <p className="mt-3 text-[14px] leading-relaxed text-[#5F5448]">
+              {item.shortDescription}
+            </p>
+
+            {item.longDescription && (
+              <div className="mt-3">
                 <button
                   type="button"
-                  onClick={() => setShowFullDesc(!showFullDesc)}
-                  className="mt-2 text-[11px] font-semibold uppercase tracking-[0.16em] text-[#8f7a65] hover:text-[#564c40] transition-colors"
+                  onClick={() => setShowFullDesc((prev) => !prev)}
+                  className="font-sans text-[11px] uppercase tracking-wider text-[#4A6350] underline hover:text-[#2B3B2F]"
                 >
-                  {showFullDesc ? "See less" : "See more"}
+                  {showFullDesc ? "Show less" : "Read more"}
                 </button>
-              ) : null}
-
-              {customizationOptions.length > 0 ? (
-                <div className="mt-7 space-y-5 rounded-[20px] border border-[rgba(86,76,64,0.12)] bg-[#faf6ee] p-4 sm:p-5">
-                  <p className="text-[10px] uppercase tracking-[0.24em] text-[#837260] font-semibold">
-                    Select Options & Variants
-                  </p>
-                  {customizationOptions.map((option) => {
-                    const selectId = `${item.slug}-${option.label.replace(/\s+/g, "-").toLowerCase()}`;
-                    const selected = selectedOptions[option.label] ?? "";
-                    return (
-                      <div key={option.label}>
-                        <div className="mb-2 flex items-center justify-between">
-                          <label
-                            htmlFor={selectId}
-                            className="block text-[11px] uppercase tracking-[0.16em] text-[#5c5044] font-medium"
-                          >
-                            {option.label}
-                            <span className="ml-1 text-[#9a785d]" aria-hidden>*</span>
-                          </label>
-                          {selected ? (
-                            <span className="text-[12px] font-medium text-[#2e4a36]">
-                              {selected}
-                            </span>
-                          ) : (
-                            <span className="text-[11px] italic text-[#9a785d]">
-                              Required
-                            </span>
-                          )}
-                        </div>
-                        <div className="flex flex-wrap gap-2">
-                          {option.values.map((value) => {
-                            const isChosen = selected === value;
-                            return (
-                              <button
-                                key={value}
-                                type="button"
-                                onClick={() =>
-                                  setSelectedOptions((current) => ({
-                                    ...current,
-                                    [option.label]: value,
-                                  }))
-                                }
-                                className={`rounded-full px-3.5 py-1.5 text-[12px] font-medium transition-all ${
-                                  isChosen
-                                    ? "bg-[#2e4a36] text-[#faf7f1] shadow-sm ring-2 ring-[#2e4a36]/20"
-                                    : "border border-[#d8cec1] bg-white text-[#4a4238] hover:border-[#2e4a36]"
-                                }`}
-                              >
-                                {value}
-                              </button>
-                            );
-                          })}
-                        </div>
-                      </div>
-                    );
-                  })}
-                </div>
-              ) : null}
-
-              <div className="mt-8">
-                <button
-                  type="button"
-                  disabled={!allRequiredSelected}
-                  onClick={() => {
-                    onSelectGiftProduct?.(item, {
-                      label: selectionLabel || null,
-                      options: customizationOptions.length > 0 ? selectedOptions : null,
-                    });
-                    onClose();
-                  }}
-                  className="inline-flex min-h-[46px] w-full items-center justify-center gap-2 rounded-full bg-[#294536] px-6 py-3 text-[11px] font-medium uppercase tracking-[0.22em] text-[#f4efe8] transition-all hover:bg-[#21382c] disabled:cursor-not-allowed disabled:opacity-50"
-                >
-                  <span>Select {item.type || "Object"} for Gift Box</span>
-                  <span aria-hidden>✓</span>
-                </button>
-                {!allRequiredSelected && customizationOptions.length > 0 && (
-                  <p className="mt-2 text-center text-[11px] text-[#9a785d]">
-                    Please choose your options above before selecting.
-                  </p>
+                {showFullDesc && (
+                  <div className="mt-3 border-t border-[#E3D4C4] pt-3 text-[13px] leading-relaxed text-[#5F5448]">
+                    <ReactMarkdown>{item.longDescription}</ReactMarkdown>
+                  </div>
                 )}
               </div>
+            )}
+          </div>
 
-              <div className="mt-6 border-t border-[#d8cec1]/60 pt-4">
-                <Link
-                  href={canonicalShopRoutes.bulkOrders}
-                  onClick={onClose}
-                  className="inline-flex items-center gap-1.5 text-[12px] font-medium text-[#7a6448] underline decoration-[#7a6448]/30 underline-offset-4 transition hover:text-[#5a4630]"
-                >
-                  <Sparkles size={13} />
-                  <span>Planning for an event or corporate gifting? Inquire in bulk →</span>
-                </Link>
-              </div>
+          {/* Variants / Customization Options */}
+          {customizationOptions.length > 0 && (
+            <div className="space-y-4 border-t border-[#E3D4C4] pt-4 font-sans">
+              <h3 className="text-[12px] font-medium uppercase tracking-[0.16em] text-[#8C7A6E]">
+                Select Options
+              </h3>
+              {customizationOptions.map((opt) => (
+                <div key={opt.label} className="space-y-2">
+                  <label className="block text-[12px] font-medium text-[#2A1D1B]">
+                    {opt.label} {opt.required && <span className="text-[#8A483B]">*</span>}
+                  </label>
+                  <div className="flex flex-wrap gap-2">
+                    {opt.values.map((val) => {
+                      const active = selectedOptions[opt.label] === val;
+                      return (
+                        <button
+                          key={val}
+                          type="button"
+                          onClick={() =>
+                            setSelectedOptions((prev) => ({
+                              ...prev,
+                              [opt.label]: val,
+                            }))
+                          }
+                          className={`rounded-lg px-3.5 py-2 text-[12px] font-medium transition-all ${
+                            active
+                              ? "bg-[#2B3B2F] text-[#F6EEE4] shadow-sm ring-2 ring-[#2B3B2F]/20"
+                              : "border border-[#D4C3B2] bg-[#FAF4EC] text-[#4C413A] hover:bg-[#EFE3D3]"
+                          }`}
+                        >
+                          {val}
+                        </button>
+                      );
+                    })}
+                  </div>
+                </div>
+              ))}
             </div>
+          )}
+
+          {/* Action Row */}
+          <div className="border-t border-[#E3D4C4] pt-4 font-sans">
+            <button
+              type="button"
+              disabled={!allRequiredSelected || !canAddMore}
+              onClick={() => {
+                onAddGiftProduct?.(item, {
+                  label: selectionLabel || null,
+                  options: customizationOptions.length > 0 ? selectedOptions : null,
+                });
+                onClose();
+              }}
+              className="flex min-h-[46px] w-full items-center justify-center gap-2 rounded-lg bg-[#2B3B2F] px-6 py-3 text-[11px] font-medium uppercase tracking-[0.18em] text-[#F6EEE4] transition-all hover:bg-[#1E2B22] disabled:cursor-not-allowed disabled:opacity-50"
+            >
+              <span>
+                {!canAddMore
+                  ? "Gift Box Full (Max Items Reached)"
+                  : isAlreadyInGift
+                    ? `+ Add Another with Selected Options`
+                    : `+ Add to Gift Box`}
+              </span>
+            </button>
+
+            {isAlreadyInGift && (
+              <button
+                type="button"
+                onClick={() => {
+                  onRemoveGiftProduct?.(item);
+                  onClose();
+                }}
+                className="mt-2.5 flex min-h-[40px] w-full items-center justify-center gap-2 rounded-lg border border-[#8A483B]/40 bg-transparent px-6 py-2 text-[11px] font-medium uppercase tracking-[0.16em] text-[#8A483B] transition-colors hover:bg-[#8A483B]/10"
+              >
+                Remove one from Gift Box
+              </button>
+            )}
+
+            {!allRequiredSelected && customizationOptions.length > 0 && (
+              <p className="mt-2 text-center text-[11px] text-[#8A483B]">
+                Please choose all required options above.
+              </p>
+            )}
+          </div>
+
+          <div className="border-t border-[#E3D4C4] pt-4">
+            <Link
+              href={canonicalShopRoutes.bulkOrders}
+              onClick={onClose}
+              className="inline-flex items-center gap-1.5 font-sans text-[12px] font-medium text-[#7A6448] underline decoration-[#7A6448]/30 underline-offset-4 hover:text-[#5A4630]"
+            >
+              <Sparkles size={13} />
+              <span>Looking for corporate or wedding gifting? Inquire in bulk →</span>
+            </Link>
           </div>
         </div>
       </aside>
     </div>
   );
 }
-

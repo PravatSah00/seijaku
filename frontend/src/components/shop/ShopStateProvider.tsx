@@ -530,6 +530,13 @@ export function ShopStateProvider({ children }: { children: React.ReactNode }) {
         setCheckoutSelectedOptions(selection?.options ?? null);
       },
       clearCheckout: () => {
+        if (typeof window !== "undefined") {
+          try {
+            window.localStorage.removeItem(CHECKOUT_KEY);
+            window.localStorage.removeItem(CHECKOUT_VARIANT_KEY);
+            window.localStorage.removeItem(CHECKOUT_OPTIONS_KEY);
+          } catch {}
+        }
         setCheckoutItemSlug(null);
         setCheckoutVariantLabel(null);
         setCheckoutSelectedOptions(null);

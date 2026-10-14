@@ -357,6 +357,8 @@ paymentsRouter.get(
       where: { id },
       select: {
         id: true,
+        source: true,
+        notes: true,
         paymentStatus: true,
         totalAmount: true,
         currency: true,
