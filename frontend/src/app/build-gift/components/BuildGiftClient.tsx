@@ -11,8 +11,12 @@ import {
     DEFAULT_MIN_GIFT_PRODUCTS,
     clearStoredGiftItems,
     generateInstanceId,
+    getGiftCheckoutBundle,
     getStoredGiftItems,
     setStoredGiftItems,
+    setGiftCheckoutBundle,
+    type GiftCheckoutBundle,
+    type GiftCheckoutItem,
     type GiftItemSelection,
     type GiftStepKey,
     type ProductSelectionPayload,
@@ -748,7 +752,7 @@ export default function BuildGiftClient({
     maxProducts?: number;
 }) {
     const router = useRouter();
-    const { addToCart, openCart } = useShopState();
+    const { addToCart, openCart, clearCheckout } = useShopState();
 
     const [stepIndex, setStepIndex] = useState(0);
     const [giftItems, setGiftItems] = useState<GiftItemSelection[]>([]);
@@ -770,13 +774,39 @@ export default function BuildGiftClient({
     useEffect(() => {
         if (savedLoaded || products.length === 0) return;
 
-        const stored = getStoredGiftItems();
+        let stored = getStoredGiftItems();
         // Discard any items with unknown product IDs
-        const valid = stored.filter((item) => productsById.has(item.productId));
+        let valid = stored.filter((item) => productsById.has(item.productId));
+
+        // Fallback: If draft was empty, recover selections from active gift checkout bundle
+        if (valid.length === 0) {
+            const bundle = getGiftCheckoutBundle();
+            if (bundle && bundle.items && bundle.items.length > 0) {
+                const recovered: GiftItemSelection[] = [];
+                for (const bItem of bundle.items) {
+                    const matchProduct = products.find((p) => p.slug === bItem.productSlug);
+                    if (matchProduct) {
+                        const stepKey =
+                            STEPS.find((s) => s.label === bItem.categoryName)?.key ?? "scarves-and-squares";
+                        recovered.push({
+                            instanceId: generateInstanceId(),
+                            productId: matchProduct.id,
+                            stepKey,
+                            options: bItem.selectedOptions
+                                ? { label: bItem.variantLabel, options: bItem.selectedOptions }
+                                : null,
+                        });
+                    }
+                }
+                if (recovered.length > 0) {
+                    valid = recovered;
+                }
+            }
+        }
 
         setGiftItems(valid);
-        if (valid.length >= minProducts && valid.length >= maxProducts) {
-            setStepIndex(STEPS.length); // Open directly on Review if full
+        if (valid.length >= minProducts) {
+            setStepIndex(STEPS.length); // Open directly on Review screen so user sees their gift box
         }
         setSavedLoaded(true);
     }, [products, productsById, savedLoaded, minProducts, maxProducts]);
@@ -889,64 +919,75 @@ export default function BuildGiftClient({
         }
     }
 
-    async function persistAndAddGiftItems() {
-        const validItems = resolvedGiftItems.filter(
-            (item): item is ResolvedGiftItem & { product: ProductView } => item.product !== null,
-        );
+    function buildGiftCheckoutItems(validItems: (ResolvedGiftItem & { product: ProductView })[]): GiftCheckoutItem[] {
+        return validItems.map((item) => {
+            const categoryLabel = item.stepConfig.label;
+            const optionLabel = item.options?.label;
+            const variantLabel = optionLabel
+                ? `[Gift Box · ${categoryLabel}] ${optionLabel}`
+                : `[Gift Box · ${categoryLabel}]`;
 
-        if (validItems.length < minProducts) {
-            throw new Error(`Minimum ${minProducts} products required for a gift.`);
-        }
+            const selectedOptions: Record<string, string> = {
+                ...(item.options?.options || {}),
+                "Gift Category": categoryLabel,
+                "Gift Packaging": "Festive Gift Box & Handwritten Card",
+            };
 
-        const items = validItems.map(({ stepConfig, product, options }) => ({
-            type: stepConfig.key,
-            id: product.id,
-            slug: product.slug,
-            name: product.title,
-            price: product.price,
-            variantLabel: options?.label,
-            selectedOptions: options?.options,
-        }));
-
-        try {
-            localStorage.setItem(
-                GIFT_STORAGE_KEY,
-                JSON.stringify({ items, packaging: "festive", total }),
-            );
-        } catch {
-            // Optional local cache
-        }
-
-        // Add each chosen gift object to the cart with its selected options
-        for (const item of validItems) {
-            addToCart(
-                {
-                    productSlug: item.product.slug,
-                    title: item.product.title,
-                    unitPrice: item.product.price,
-                    priceLabel: item.product.priceLabel,
-                    quantity: 1,
-                    image: item.product.image,
-                    shortDescription: item.product.shortDescription,
-                    variantLabel: item.options?.label || null,
-                    selectedOptions: item.options?.options || null,
-                },
-                { openDrawer: false },
-            );
-        }
-
-        clearStoredGiftItems();
+            return {
+                productSlug: item.product.slug,
+                title: item.product.title,
+                unitPrice: item.product.price,
+                priceLabel: item.product.priceLabel,
+                quantity: 1,
+                image: item.product.image,
+                shortDescription: item.product.shortDescription,
+                variantLabel,
+                selectedOptions,
+                categoryName: categoryLabel,
+                weightGrams: item.product.weightGrams,
+                lengthCm: item.product.lengthCm,
+                breadthCm: item.product.breadthCm,
+                heightCm: item.product.heightCm,
+            };
+        });
     }
 
     async function addToBag() {
         if (!canAccessReview) return;
         setIsSubmitting(true);
         try {
-            await persistAndAddGiftItems();
+            const validItems = resolvedGiftItems.filter(
+                (item): item is ResolvedGiftItem & { product: ProductView } => item.product !== null,
+            );
+
+            if (validItems.length < minProducts) {
+                throw new Error(`Minimum ${minProducts} products required for a gift.`);
+            }
+
+            const checkoutItems = buildGiftCheckoutItems(validItems);
+
+            for (const item of checkoutItems) {
+                addToCart(
+                    {
+                        productSlug: item.productSlug,
+                        title: item.title,
+                        unitPrice: item.unitPrice,
+                        priceLabel: item.priceLabel,
+                        quantity: 1,
+                        image: item.image,
+                        shortDescription: item.shortDescription,
+                        variantLabel: item.variantLabel,
+                        selectedOptions: item.selectedOptions,
+                    },
+                    { openDrawer: false },
+                );
+            }
+
+            clearStoredGiftItems();
             setAdded(true);
             openCart();
         } catch (error) {
-            console.error("Unable to save gift bundle.", error);
+            console.error("Unable to save gift bundle to bag.", error);
         } finally {
             setIsSubmitting(false);
         }
@@ -956,8 +997,59 @@ export default function BuildGiftClient({
         if (!canAccessReview) return;
         setIsSubmitting(true);
         try {
-            await persistAndAddGiftItems();
-            router.push("/checkout");
+            const validItems = resolvedGiftItems.filter(
+                (item): item is ResolvedGiftItem & { product: ProductView } => item.product !== null,
+            );
+
+            if (validItems.length < minProducts) {
+                throw new Error(`Minimum ${minProducts} products required for a gift.`);
+            }
+
+            const checkoutItems = buildGiftCheckoutItems(validItems);
+
+            const bundle: GiftCheckoutBundle = {
+                isGift: true,
+                packaging: "festive",
+                packagingTitle: "Festive Gift Box Packaging & Handwritten Card",
+                total,
+                items: checkoutItems,
+            };
+
+            // 1. Store gift bundle for checkout
+            setGiftCheckoutBundle(bundle);
+
+            // 2. Clear stale single-item Buy Now checkout state
+            clearCheckout();
+            if (typeof window !== "undefined") {
+                try {
+                    window.localStorage.removeItem("seijaku-checkout-item");
+                    window.localStorage.removeItem("seijaku-checkout-variant");
+                    window.localStorage.removeItem("seijaku-checkout-options");
+                } catch {}
+            }
+
+            // 3. Sync to cart as well with gift labels
+            for (const item of checkoutItems) {
+                addToCart(
+                    {
+                        productSlug: item.productSlug,
+                        title: item.title,
+                        unitPrice: item.unitPrice,
+                        priceLabel: item.priceLabel,
+                        quantity: 1,
+                        image: item.image,
+                        shortDescription: item.shortDescription,
+                        variantLabel: item.variantLabel,
+                        selectedOptions: item.selectedOptions,
+                    },
+                    { openDrawer: false },
+                );
+            }
+
+            // 4. Keep builder draft preserved so navigating back to /build-gift maintains all selections
+
+            // 5. Navigate to checkout with gift query parameter
+            router.push("/checkout?gift=true");
         } catch (error) {
             console.error("Failed to proceed to checkout.", error);
         } finally {

@@ -28,11 +28,38 @@ export type GiftItemSelection = {
     options?: ProductSelectionPayload | null;
 };
 
+export type GiftCheckoutItem = {
+    productSlug: string;
+    title: string;
+    unitPrice: number;
+    priceLabel?: string;
+    quantity: number;
+    image?: string;
+    shortDescription?: string;
+    variantLabel?: string | null;
+    selectedOptions?: Record<string, string> | null;
+    categoryName?: string;
+    weightGrams?: number | null;
+    lengthCm?: number | null;
+    breadthCm?: number | null;
+    heightCm?: number | null;
+};
+
+export type GiftCheckoutBundle = {
+    isGift: true;
+    packaging: "festive";
+    packagingTitle: string;
+    giftNote?: string;
+    total: number;
+    items: GiftCheckoutItem[];
+};
+
 export const DEFAULT_MIN_GIFT_PRODUCTS = 2;
 export const DEFAULT_MAX_GIFT_PRODUCTS = 3;
 
 const STORAGE_KEY_V2 = "seijaku-gift-selection-v2";
 const LEGACY_STORAGE_KEY = "seijaku-gift-selection";
+export const GIFT_CHECKOUT_STORAGE_KEY = "seijaku-gift-checkout";
 
 export function generateInstanceId(): string {
     return `gift-${Date.now()}-${Math.random().toString(36).substring(2, 9)}`;
@@ -140,3 +167,51 @@ export function clearStoredGiftItems(): void {
 }
 
 export const clearGiftSelectionIds = clearStoredGiftItems;
+
+/**
+ * Save active gift bundle for checkout.
+ */
+export function setGiftCheckoutBundle(bundle: GiftCheckoutBundle): void {
+    if (typeof window === "undefined") return;
+    try {
+        window.localStorage.setItem(
+            GIFT_CHECKOUT_STORAGE_KEY,
+            JSON.stringify(bundle),
+        );
+    } catch (e) {
+        console.error("Unable to store gift checkout bundle", e);
+    }
+}
+
+/**
+ * Retrieve active gift bundle for checkout.
+ */
+export function getGiftCheckoutBundle(): GiftCheckoutBundle | null {
+    if (typeof window === "undefined") return null;
+    try {
+        const raw = window.localStorage.getItem(GIFT_CHECKOUT_STORAGE_KEY);
+        if (!raw) return null;
+        const parsed = JSON.parse(raw);
+        if (
+            parsed &&
+            parsed.isGift &&
+            Array.isArray(parsed.items) &&
+            parsed.items.length > 0
+        ) {
+            return parsed as GiftCheckoutBundle;
+        }
+        return null;
+    } catch {
+        return null;
+    }
+}
+
+/**
+ * Clear gift checkout bundle once order is created.
+ */
+export function clearGiftCheckoutBundle(): void {
+    if (typeof window === "undefined") return;
+    try {
+        window.localStorage.removeItem(GIFT_CHECKOUT_STORAGE_KEY);
+    } catch {}
+}
