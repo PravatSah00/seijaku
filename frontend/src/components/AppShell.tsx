@@ -12,7 +12,7 @@ import GiftLandingNavbar from "./LandingNavbar";
 export default function AppShell({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
   const isAdmin = pathname.startsWith("/admin");
-  const isLanding = pathname.startsWith("/home");
+  const isLanding = pathname.startsWith("/gifts");
 
   if (isAdmin) {
     return <>{children}</>;
