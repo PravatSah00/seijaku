@@ -158,7 +158,8 @@ const LandingPage = () => {
                         </p>
 
                         <a
-                            onClick={handleRedirectToBuildGift}
+                            // onClick={handleRedirectToBuildGift}
+                            href="#build-gift-listing"
                             className="cursor-pointer mt-8 inline-flex h-[46px] w-full items-center justify-center gap-2 bg-[#2B3B2F] font-sans text-[12px] font-medium uppercase tracking-[0.16em] text-[#F6EEE4] transition-colors hover:bg-[#1F2C23] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#2B3B2F] sm:mt-9 sm:h-[44px] sm:w-[240px] lg:h-[clamp(44px,2.6vw,56px)] lg:w-[clamp(232px,15vw,300px)] lg:text-[clamp(12px,0.75vw,14px)]"
                         >
                             Build your gift
@@ -219,6 +220,7 @@ const LandingPage = () => {
                     fontFamily:
                         "'EB Garamond', 'Cormorant Garamond', Georgia, serif",
                 }}
+                id="build-gift-listing"
             >
                 <div className="mx-auto w-full max-w-[1100px] 2xl:max-w-[1400px]">
                     {/* ---------- Heading ---------- */}
@@ -312,14 +314,6 @@ const LandingPage = () => {
                             Handcrafted in India. Inspired by Bengal and Japan. Made for
                             slower, more meaningful moments.
                         </p>
-
-                        <a
-                            href="#our-story"
-                            className="mt-6 inline-flex items-center gap-2 font-sans text-[12px] font-semibold uppercase tracking-[0.16em] text-[#2A1D1B] transition-opacity hover:opacity-70 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-[#2B3B2F] lg:text-[clamp(12px,0.8vw,15px)]"
-                        >
-                            Our story
-                            <span aria-hidden="true">→</span>
-                        </a>
                     </div>
                 </div>
 
@@ -394,7 +388,8 @@ const LandingPage = () => {
                     </p>
 
                     <a
-                        onClick={handleRedirectToBuildGift}
+                        // onClick={handleRedirectToBuildGift}
+                        href="#build-gift-listing"
                         className="cursor-pointer group mt-6 inline-flex h-[46px] w-full max-w-[260px] items-center justify-center gap-2 bg-[#F7F1E8] font-sans text-[12px] font-semibold uppercase tracking-[0.16em] text-[#2A1D1B] transition-colors duration-300 hover:bg-[#D9A878] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-[#F7F1E8] lg:mt-[clamp(22px,1.8vw,40px)] lg:h-[clamp(46px,3vw,60px)] lg:w-[clamp(220px,14vw,300px)] lg:max-w-none lg:text-[clamp(12px,0.8vw,15px)]"
                     >
                         Start building
