@@ -1,14 +1,15 @@
 "use client";
 import type { ProductView } from "@/src/lib/product-types";
-import { Fragment, useEffect, useMemo, useState } from "react";
+import { Fragment, useEffect, useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { ArrowRight, Plus, Trash2 } from "lucide-react";
 import ProductDrawer from "./ProductDrawer";
-import { useShopState } from "@/src/components/shop/ShopStateProvider";
+import { useShopState, isGiftCartItem } from "@/src/components/shop/ShopStateProvider";
 import {
     DEFAULT_MAX_GIFT_PRODUCTS,
     DEFAULT_MIN_GIFT_PRODUCTS,
     clearStoredGiftItems,
+    clearGiftCheckoutBundle,
     generateInstanceId,
     getGiftCheckoutBundle,
     getStoredGiftItems,
@@ -260,7 +261,7 @@ function GiftSidebar({
     isSubmitting: boolean;
     onContinue: () => void;
     onGoToStep: (index: number) => void;
-    onRemoveItem: (instanceId: string) => void;
+    onRemoveItem: (instanceId: string, fallbackProductId?: string) => void;
     onCheckout: () => void;
 }) {
     const currentStepConfig = STEPS[currentStepIndex];
@@ -286,7 +287,9 @@ function GiftSidebar({
                         <div className="rounded-lg border border-dashed border-[#E3D4C4] p-4 text-center font-sans text-[12px] text-[#7A6A5E]">
                             <p className="font-medium text-[#4C413A]">Box is empty</p>
                             <p className="mt-1 text-[11px]">
-                                Add {minProducts} to {maxProducts} products from any section.
+                                {minProducts === maxProducts
+                                    ? `Add ${minProducts} products from any section.`
+                                    : `Add ${minProducts} to ${maxProducts} products from any section.`}
                             </p>
                         </div>
                     ) : (
@@ -330,7 +333,7 @@ function GiftSidebar({
                                             )}
                                             <button
                                                 type="button"
-                                                onClick={() => onRemoveItem(item.instanceId)}
+                                                onClick={() => onRemoveItem(item.instanceId, item.productId)}
                                                 className="text-[#8A483B] underline hover:text-[#64291F]"
                                             >
                                                 Remove
@@ -437,7 +440,7 @@ function GiftReview({
     isSubmitting: boolean;
     onAddToBag: () => void;
     onCheckout: () => void;
-    onRemoveItem: (instanceId: string) => void;
+    onRemoveItem: (instanceId: string, fallbackProductId?: string) => void;
     onGoToStep: (index: number) => void;
 }) {
     const validItems = items.filter(
@@ -495,7 +498,7 @@ function GiftReview({
                                         <div className="mt-2 flex items-center justify-center gap-2 font-sans text-[10px]">
                                             <button
                                                 type="button"
-                                                onClick={() => onRemoveItem(item.instanceId)}
+                                                onClick={() => onRemoveItem(item.instanceId, item.stepIndex >= 0 ? validItems[index]?.productId : undefined)}
                                                 className="inline-flex items-center gap-1 text-[#8A483B] hover:underline"
                                             >
                                                 <Trash2 size={11} />
@@ -589,7 +592,7 @@ function GiftReview({
                                     <div className="mt-1 flex items-center gap-2 text-[10px]">
                                         <button
                                             type="button"
-                                            onClick={() => onRemoveItem(item.instanceId)}
+                                            onClick={() => onRemoveItem(item.instanceId, item.productId)}
                                             className="text-[#8A483B] underline hover:text-[#64291F]"
                                         >
                                             Remove
@@ -657,6 +660,38 @@ function GiftReview({
         </div>
     );
 }
+
+function buildGiftCheckoutItems(validItems: (ResolvedGiftItem & { product: ProductView })[]): GiftCheckoutItem[] {
+    return validItems.map((item) => {
+        const categoryLabel = item.stepConfig.label;
+        const optionLabel = item.options?.label;
+        const variantLabel = optionLabel
+            ? `[Gift Box · ${categoryLabel}] ${optionLabel}`
+            : `[Gift Box · ${categoryLabel}]`;
+        const selectedOptions: Record<string, string> = {
+            ...(item.options?.options || {}),
+            "Gift Category": categoryLabel,
+            "Gift Packaging": "Festive Gift Box & Handwritten Card",
+        };
+        return {
+            productSlug: item.product.slug,
+            title: item.product.title,
+            unitPrice: item.product.price,
+            priceLabel: item.product.priceLabel,
+            quantity: 1,
+            image: item.product.image,
+            shortDescription: item.product.shortDescription,
+            variantLabel,
+            selectedOptions,
+            categoryName: categoryLabel,
+            weightGrams: item.product.weightGrams,
+            lengthCm: item.product.lengthCm,
+            breadthCm: item.product.breadthCm,
+            heightCm: item.product.heightCm,
+        };
+    });
+}
+
 export default function BuildGiftClient({
     products,
     minProducts = DEFAULT_MIN_GIFT_PRODUCTS,
@@ -667,7 +702,11 @@ export default function BuildGiftClient({
     maxProducts?: number;
 }) {
     const router = useRouter();
-    const { addToCart, openCart, clearCheckout } = useShopState();
+    const { addToCart, openCart, clearCheckout, cart, syncGiftBundleToCart } = useShopState();
+    const hydratedRef = useRef(false);
+    const cartRef = useRef(cart);
+    cartRef.current = cart;
+
     const [stepIndex, setStepIndex] = useState(0);
     const [giftItems, setGiftItems] = useState<GiftItemSelection[]>([]);
     const [savedLoaded, setSavedLoaded] = useState(false);
@@ -680,14 +719,16 @@ export default function BuildGiftClient({
         [products],
     );
     /*
-     * Hydrate saved selections once from storage.
+     * Hydrate saved selections once from storage or active cart.
      */
     useEffect(() => {
-        if (savedLoaded || products.length === 0) return;
+        if (hydratedRef.current || products.length === 0) return;
+        hydratedRef.current = true;
+
         let stored = getStoredGiftItems();
         // Discard any items with unknown product IDs
         let valid = stored.filter((item) => productsById.has(item.productId));
-        // Fallback: If draft was empty, recover selections from active gift checkout bundle
+        // Fallback 1: If draft was empty, recover selections from active gift checkout bundle
         if (valid.length === 0) {
             const bundle = getGiftCheckoutBundle();
             if (bundle && bundle.items && bundle.items.length > 0) {
@@ -712,16 +753,126 @@ export default function BuildGiftClient({
                 }
             }
         }
+        // Fallback 2: If still empty, check if cart contains gift items (e.g. across login sessions)
+        const currentCart = cartRef.current;
+        if (valid.length === 0 && currentCart && currentCart.length > 0) {
+            const giftCartItems = currentCart.filter(isGiftCartItem);
+            if (giftCartItems.length > 0) {
+                const recoveredFromCart: GiftItemSelection[] = [];
+                for (const cItem of giftCartItems) {
+                    const matchProduct = products.find((p) => p.slug === cItem.productSlug);
+                    if (matchProduct) {
+                        const stepKey =
+                            STEPS.find((s) => s.label === cItem.selectedOptions?.["Gift Category"])?.key ?? "scarves-and-squares";
+                        for (let q = 0; q < (cItem.quantity || 1); q++) {
+                            recoveredFromCart.push({
+                                instanceId: generateInstanceId(),
+                                productId: matchProduct.id,
+                                stepKey,
+                                options: cItem.selectedOptions
+                                    ? { label: cItem.variantLabel || "", options: cItem.selectedOptions }
+                                    : null,
+                            });
+                        }
+                    }
+                }
+                if (recoveredFromCart.length > 0) {
+                    valid = recoveredFromCart;
+                }
+            }
+        }
+        // Guarantee each item always has a valid instanceId
+        valid = valid.map((item) => ({
+            ...item,
+            instanceId: item.instanceId || generateInstanceId(),
+        }));
         setGiftItems(valid);
         setSavedLoaded(true);
-    }, [products, productsById, savedLoaded, minProducts, maxProducts]);
+    }, [products, productsById]);
+
     /*
-     * Keep storage in sync with active gift items.
+     * Listen for gift items removed or cleared from global CartDrawer
+     */
+    useEffect(() => {
+        function handleGiftCartRemoved(e: Event) {
+            const customEvent = e as CustomEvent<{ productSlug?: string }>;
+            const slug = customEvent.detail?.productSlug;
+            if (!slug) return;
+            const matchingProduct = products.find((p) => p.slug === slug);
+            if (matchingProduct) {
+                removeProductOne(matchingProduct);
+            }
+        }
+        function handleGiftCartCleared() {
+            setGiftItems([]);
+            clearGiftCheckoutBundle();
+        }
+        if (typeof window !== "undefined") {
+            window.addEventListener("seijaku-gift-cart-removed", handleGiftCartRemoved);
+            window.addEventListener("seijaku-gift-cart-cleared", handleGiftCartCleared);
+            return () => {
+                window.removeEventListener("seijaku-gift-cart-removed", handleGiftCartRemoved);
+                window.removeEventListener("seijaku-gift-cart-cleared", handleGiftCartCleared);
+            };
+        }
+    }, [products]);
+
+    /*
+     * Keep storage, gift checkout bundle, and global cart in sync with active gift items.
      */
     useEffect(() => {
         if (!savedLoaded) return;
+
+        // 1. Sync gift items to builder localStorage
         setStoredGiftItems(giftItems);
-    }, [savedLoaded, giftItems]);
+
+        // 2. Filter valid resolved items
+        const validItems = giftItems
+            .map((item) => ({
+                ...item,
+                product: productsById.get(item.productId) ?? null,
+                stepConfig: STEPS.find((s) => s.key === item.stepKey) ?? STEPS[0],
+            }))
+            .filter((item): item is ResolvedGiftItem & { product: ProductView } => item.product !== null);
+
+        // 3. When empty: clear checkout bundle and remove gift items from cart
+        if (validItems.length === 0) {
+            clearGiftCheckoutBundle();
+            syncGiftBundleToCart([]);
+            return;
+        }
+
+        // 4. When non-empty: build checkout items & bundle
+        const checkoutItems = buildGiftCheckoutItems(validItems);
+        const currentTotal = validItems.reduce((sum, item) => sum + item.product.price, 0);
+        const bundle: GiftCheckoutBundle = {
+            isGift: true,
+            packaging: "festive",
+            packagingTitle: "Festive Gift Box Packaging & Handwritten Card",
+            total: currentTotal,
+            items: checkoutItems,
+        };
+        setGiftCheckoutBundle(bundle);
+
+        // 5. Sync to global cart (Navbar badge, CartDrawer, backend if logged in)
+        const cartPayloads = checkoutItems.map((item) => ({
+            productSlug: item.productSlug,
+            title: item.title,
+            unitPrice: item.unitPrice,
+            priceLabel: item.priceLabel,
+            quantity: 1,
+            image: item.image,
+            shortDescription: item.shortDescription,
+            variantLabel: item.variantLabel,
+            selectedOptions: item.selectedOptions,
+            weightGrams: item.weightGrams,
+            lengthCm: item.lengthCm,
+            breadthCm: item.breadthCm,
+            heightCm: item.heightCm,
+        }));
+        syncGiftBundleToCart(cartPayloads);
+    }, [savedLoaded, giftItems, productsById, syncGiftBundleToCart]);
+
     const selectedCount = giftItems.length;
     const canAddMore = selectedCount < maxProducts;
     const canAccessReview = selectedCount >= minProducts;
@@ -798,8 +949,24 @@ export default function BuildGiftClient({
         });
         setAdded(false);
     }
-    function removeItemByInstanceId(instanceId: string) {
-        setGiftItems((prev) => prev.filter((i) => i.instanceId !== instanceId));
+    function removeItemByInstanceId(instanceId: string, fallbackProductId?: string) {
+        setGiftItems((prev) => {
+            if (instanceId) {
+                const next = prev.filter((i) => i.instanceId && i.instanceId !== instanceId);
+                if (next.length < prev.length) {
+                    return next;
+                }
+            }
+            if (fallbackProductId) {
+                const index = prev.findIndex((i) => i.productId === fallbackProductId);
+                if (index !== -1) {
+                    const copy = [...prev];
+                    copy.splice(index, 1);
+                    return copy;
+                }
+            }
+            return prev;
+        });
         setAdded(false);
     }
     function goTo(index: number) {
@@ -815,36 +982,6 @@ export default function BuildGiftClient({
             proceedToCheckout();
         }
     }
-    function buildGiftCheckoutItems(validItems: (ResolvedGiftItem & { product: ProductView })[]): GiftCheckoutItem[] {
-        return validItems.map((item) => {
-            const categoryLabel = item.stepConfig.label;
-            const optionLabel = item.options?.label;
-            const variantLabel = optionLabel
-                ? `[Gift Box · ${categoryLabel}] ${optionLabel}`
-                : `[Gift Box · ${categoryLabel}]`;
-            const selectedOptions: Record<string, string> = {
-                ...(item.options?.options || {}),
-                "Gift Category": categoryLabel,
-                "Gift Packaging": "Festive Gift Box & Handwritten Card",
-            };
-            return {
-                productSlug: item.product.slug,
-                title: item.product.title,
-                unitPrice: item.product.price,
-                priceLabel: item.product.priceLabel,
-                quantity: 1,
-                image: item.product.image,
-                shortDescription: item.product.shortDescription,
-                variantLabel,
-                selectedOptions,
-                categoryName: categoryLabel,
-                weightGrams: item.product.weightGrams,
-                lengthCm: item.product.lengthCm,
-                breadthCm: item.product.breadthCm,
-                heightCm: item.product.heightCm,
-            };
-        });
-    }
     async function addToBag() {
         if (!canAccessReview) return;
         setIsSubmitting(true);
@@ -856,23 +993,22 @@ export default function BuildGiftClient({
                 throw new Error(`Minimum ${minProducts} products required for a gift.`);
             }
             const checkoutItems = buildGiftCheckoutItems(validItems);
-            for (const item of checkoutItems) {
-                addToCart(
-                    {
-                        productSlug: item.productSlug,
-                        title: item.title,
-                        unitPrice: item.unitPrice,
-                        priceLabel: item.priceLabel,
-                        quantity: 1,
-                        image: item.image,
-                        shortDescription: item.shortDescription,
-                        variantLabel: item.variantLabel,
-                        selectedOptions: item.selectedOptions,
-                    },
-                    { openDrawer: false },
-                );
-            }
-            clearStoredGiftItems();
+            const cartPayloads = checkoutItems.map((item) => ({
+                productSlug: item.productSlug,
+                title: item.title,
+                unitPrice: item.unitPrice,
+                priceLabel: item.priceLabel,
+                quantity: 1,
+                image: item.image,
+                shortDescription: item.shortDescription,
+                variantLabel: item.variantLabel,
+                selectedOptions: item.selectedOptions,
+                weightGrams: item.weightGrams,
+                lengthCm: item.lengthCm,
+                breadthCm: item.breadthCm,
+                heightCm: item.heightCm,
+            }));
+            syncGiftBundleToCart(cartPayloads);
             setAdded(true);
             openCart();
         } catch (error) {
@@ -910,25 +1046,24 @@ export default function BuildGiftClient({
                     window.localStorage.removeItem("seijaku-checkout-options");
                 } catch {}
             }
-            // 3. Sync to cart as well with gift labels
-            for (const item of checkoutItems) {
-                addToCart(
-                    {
-                        productSlug: item.productSlug,
-                        title: item.title,
-                        unitPrice: item.unitPrice,
-                        priceLabel: item.priceLabel,
-                        quantity: 1,
-                        image: item.image,
-                        shortDescription: item.shortDescription,
-                        variantLabel: item.variantLabel,
-                        selectedOptions: item.selectedOptions,
-                    },
-                    { openDrawer: false },
-                );
-            }
-            // 4. Keep builder draft preserved so navigating back to /build-gift maintains all selections
-            // 5. Navigate to checkout with gift query parameter
+            // 3. Ensure cart has the exact current gift bundle
+            const cartPayloads = checkoutItems.map((item) => ({
+                productSlug: item.productSlug,
+                title: item.title,
+                unitPrice: item.unitPrice,
+                priceLabel: item.priceLabel,
+                quantity: 1,
+                image: item.image,
+                shortDescription: item.shortDescription,
+                variantLabel: item.variantLabel,
+                selectedOptions: item.selectedOptions,
+                weightGrams: item.weightGrams,
+                lengthCm: item.lengthCm,
+                breadthCm: item.breadthCm,
+                heightCm: item.heightCm,
+            }));
+            syncGiftBundleToCart(cartPayloads);
+            // 4. Navigate to checkout with gift query parameter
             router.push("/checkout?gift=true");
         } catch (error) {
             console.error("Failed to proceed to checkout.", error);
