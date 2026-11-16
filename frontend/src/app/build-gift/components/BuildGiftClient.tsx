@@ -102,36 +102,23 @@ function productsForStep(products: ProductView[], step: GiftStepKey): ProductVie
 function Stepper({
     current,
     countsByStep,
-    canAccessReview,
     onGo,
 }: {
     current: number;
     countsByStep: Record<GiftStepKey, number>;
-    canAccessReview: boolean;
     onGo: (index: number) => void;
 }) {
-    const stepsWithReview = [
-        ...STEPS.map((step, idx) => ({
-            label: step.shortLabel,
-            fullLabel: step.label,
-            isReview: false,
-            count: countsByStep[step.key] ?? 0,
-            index: idx,
-        })),
-        {
-            label: REVIEW_LABEL,
-            fullLabel: REVIEW_LABEL,
-            isReview: true,
-            count: 0,
-            index: STEPS.length,
-        },
-    ];
+    const steps = STEPS.map((step, idx) => ({
+        label: step.shortLabel,
+        fullLabel: step.label,
+        count: countsByStep[step.key] ?? 0,
+        index: idx,
+    }));
     return (
         <ol className="flex flex-wrap items-center justify-center gap-x-2 gap-y-2 sm:gap-x-3">
-            {stepsWithReview.map((item, index) => {
+            {steps.map((item, index) => {
                 const active = index === current;
-                const hasSelections = !item.isReview && item.count > 0;
-                const isClickable = !item.isReview || canAccessReview || current === STEPS.length;
+                const hasSelections = item.count > 0;
                 const content = (
                     <span className="flex items-center gap-1.5">
                         <span
@@ -149,9 +136,7 @@ function Stepper({
                             className={`hidden font-sans text-[10px] tracking-wide sm:inline ${
                                 active
                                     ? "font-medium text-[#2A1D1B]"
-                                    : isClickable
-                                        ? "text-[#54433D]"
-                                        : "text-[#8C7A6E]/70"
+                                    : "text-[#54433D]"
                             }`}
                         >
                             {item.label}
@@ -172,22 +157,16 @@ function Stepper({
                             />
                         )}
                         <li>
-                            {isClickable ? (
-                                <button
-                                    type="button"
-                                    onClick={() => onGo(index)}
-                                    className={`transition-opacity hover:opacity-80 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#4A6350] rounded-full ${
-                                        active ? "cursor-default" : "cursor-pointer"
-                                    }`}
-                                    aria-label={`Go to ${item.fullLabel}`}
-                                >
-                                    {content}
-                                </button>
-                            ) : (
-                                <span className="opacity-55 cursor-not-allowed">
-                                    {content}
-                                </span>
-                            )}
+                            <button
+                                type="button"
+                                onClick={() => onGo(index)}
+                                className={`transition-opacity hover:opacity-80 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#4A6350] rounded-full ${
+                                    active ? "cursor-default" : "cursor-pointer"
+                                }`}
+                                aria-label={`Go to ${item.fullLabel}`}
+                            >
+                                {content}
+                            </button>
                         </li>
                     </Fragment>
                 );
@@ -266,10 +245,11 @@ function GiftSidebar({
     minProducts,
     maxProducts,
     total,
+    isSubmitting,
     onContinue,
     onGoToStep,
     onRemoveItem,
-    onProceedToReview,
+    onCheckout,
 }: {
     items: ResolvedGiftItem[];
     currentStepIndex: number;
@@ -277,13 +257,14 @@ function GiftSidebar({
     minProducts: number;
     maxProducts: number;
     total: number;
+    isSubmitting: boolean;
     onContinue: () => void;
     onGoToStep: (index: number) => void;
     onRemoveItem: (instanceId: string) => void;
-    onProceedToReview: () => void;
+    onCheckout: () => void;
 }) {
     const currentStepConfig = STEPS[currentStepIndex];
-    const canReview = selectedCount >= minProducts;
+    const canCheckout = selectedCount >= minProducts && selectedCount <= maxProducts;
     const isFull = selectedCount >= maxProducts;
     return (
         <aside className="flex min-w-0 flex-col gap-4 xl:sticky xl:top-24 xl:self-start">
@@ -292,7 +273,7 @@ function GiftSidebar({
                     <h3 className="text-[18px] font-normal">Your Gift Box</h3>
                     <span
                         className={`font-sans text-[10px] font-medium px-2 py-0.5 rounded-full ${
-                            canReview
+                            canCheckout
                                 ? "bg-[#4A6350]/15 text-[#2B3B2F]"
                                 : "bg-[#8A483B]/10 text-[#8A483B]"
                         }`}
@@ -383,22 +364,34 @@ function GiftSidebar({
                         </span>
                     </div>
                     <div className="mt-3 flex flex-col gap-2">
-                        {canReview && (
+                        {canCheckout ? (
                             <button
                                 type="button"
-                                onClick={onProceedToReview}
-                                className="flex h-[44px] w-full items-center justify-center gap-2 rounded-lg bg-[#2B3B2F] font-sans text-[11px] font-medium uppercase tracking-[0.16em] text-[#F6EEE4] transition-all hover:bg-[#1E2B22] shadow-sm"
+                                onClick={onCheckout}
+                                disabled={isSubmitting}
+                                className="flex h-[44px] w-full items-center justify-center gap-2 rounded-lg bg-[#2B3B2F] font-sans text-[11px] font-medium uppercase tracking-[0.16em] text-[#F6EEE4] transition-all hover:bg-[#1E2B22] shadow-sm disabled:cursor-not-allowed disabled:opacity-50"
                             >
-                                <span>Review Gift Box ({selectedCount} items)</span>
+                                <span>
+                                    {isSubmitting ? "Processing..." : "Proceed to Checkout"}
+                                </span>
                                 <span aria-hidden>→</span>
                             </button>
-                        )}
+                        ) : currentStepIndex === STEPS.length - 1 ? (
+                            <button
+                                type="button"
+                                disabled
+                                className="flex h-[44px] w-full items-center justify-center gap-2 rounded-lg bg-[#2B3B2F] font-sans text-[11px] font-medium uppercase tracking-[0.16em] text-[#F6EEE4] opacity-50 cursor-not-allowed shadow-sm"
+                            >
+                                <span>Proceed to Checkout</span>
+                                <span aria-hidden>→</span>
+                            </button>
+                        ) : null}
                         {currentStepIndex < STEPS.length - 1 && (
                             <button
                                 type="button"
                                 onClick={onContinue}
                                 className={`flex h-[42px] w-full items-center justify-center gap-2 rounded-lg font-sans text-[11px] font-medium uppercase tracking-[0.16em] transition-all ${
-                                    canReview
+                                    canCheckout
                                         ? "border border-[#4A6350] bg-transparent text-[#2B3B2F] hover:bg-[#4A6350]/10"
                                         : "bg-[#4A6350] text-[#F6EEE4] hover:bg-[#3E5544]"
                                 }`}
@@ -406,9 +399,14 @@ function GiftSidebar({
                                 <span>Next: {STEPS[currentStepIndex + 1].shortLabel} →</span>
                             </button>
                         )}
-                        {!canReview && (
+                        {selectedCount < minProducts && (
                             <p className="text-center font-sans text-[10px] text-[#8A483B]">
-                                Add {minProducts - selectedCount} more item{minProducts - selectedCount > 1 ? "s" : ""} to proceed to review
+                                Add {minProducts - selectedCount} more item{minProducts - selectedCount > 1 ? "s" : ""} to proceed to checkout
+                            </p>
+                        )}
+                        {selectedCount > maxProducts && (
+                            <p className="text-center font-sans text-[10px] text-[#8A483B]">
+                                Maximum {maxProducts} items allowed. Please remove {selectedCount - maxProducts} item{selectedCount - maxProducts > 1 ? "s" : ""}.
                             </p>
                         )}
                     </div>
@@ -715,9 +713,6 @@ export default function BuildGiftClient({
             }
         }
         setGiftItems(valid);
-        if (valid.length >= minProducts) {
-            setStepIndex(STEPS.length); // Open directly on Review screen so user sees their gift box
-        }
         setSavedLoaded(true);
     }, [products, productsById, savedLoaded, minProducts, maxProducts]);
     /*
@@ -808,7 +803,7 @@ export default function BuildGiftClient({
         setAdded(false);
     }
     function goTo(index: number) {
-        if (index < 0 || index > STEPS.length) return;
+        if (index < 0 || index >= STEPS.length) return;
         setStepIndex(index);
         setAdded(false);
         window.scrollTo({ top: 0, behavior: "smooth" });
@@ -817,7 +812,7 @@ export default function BuildGiftClient({
         if (stepIndex < STEPS.length - 1) {
             goTo(stepIndex + 1);
         } else if (canAccessReview) {
-            goTo(STEPS.length);
+            proceedToCheckout();
         }
     }
     function buildGiftCheckoutItems(validItems: (ResolvedGiftItem & { product: ProductView })[]): GiftCheckoutItem[] {
@@ -956,7 +951,6 @@ export default function BuildGiftClient({
                     <Stepper
                         current={stepIndex}
                         countsByStep={countsByStep}
-                        canAccessReview={canAccessReview}
                         onGo={goTo}
                     />
                     <span className="hidden font-serif text-[12px] italic text-[#9A8574] 2xl:block">
@@ -1051,7 +1045,7 @@ export default function BuildGiftClient({
                             </div>
                         </div>
 
-                        {/* Right: existing summary with its original actions */}
+                        {/* Right: existing summary with Proceed to Checkout */}
                         <GiftSidebar
                             items={resolvedGiftItems}
                             currentStepIndex={stepIndex}
@@ -1059,10 +1053,11 @@ export default function BuildGiftClient({
                             minProducts={minProducts}
                             maxProducts={maxProducts}
                             total={total}
+                            isSubmitting={isSubmitting}
                             onContinue={continueToNextStep}
                             onGoToStep={goTo}
                             onRemoveItem={removeItemByInstanceId}
-                            onProceedToReview={() => goTo(STEPS.length)}
+                            onCheckout={proceedToCheckout}
                         />
                     </div>
                 )}
