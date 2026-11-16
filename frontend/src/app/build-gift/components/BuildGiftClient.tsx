@@ -1,8 +1,9 @@
 "use client";
 import type { ProductView } from "@/src/lib/product-types";
 import { Fragment, useEffect, useMemo, useRef, useState } from "react";
+import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { ArrowRight, Plus, Trash2 } from "lucide-react";
+import { ArrowLeft, ArrowRight, Plus, Trash2 } from "lucide-react";
 import ProductDrawer from "./ProductDrawer";
 import { useShopState, isGiftCartItem } from "@/src/components/shop/ShopStateProvider";
 import {
@@ -95,7 +96,69 @@ function isProductForStep(product: ProductView, stepKey: GiftStepKey): boolean {
     if (product.bridgeCategory) {
         return product.bridgeCategory === stepKey;
     }
-    return false;
+
+    const typeStr = (product.type || "").toLowerCase();
+    const materialStr = (product.material || "").toLowerCase();
+    const slugStr = (product.slug || "").toLowerCase();
+    const titleStr = (product.title || "").toLowerCase();
+    const descStr = (product.shortDescription || "").toLowerCase();
+    const allText = `${typeStr} ${materialStr} ${slugStr} ${titleStr} ${descStr}`;
+
+    switch (stepKey) {
+        case "scarves-and-squares":
+            return (
+                typeStr.includes("scarf") ||
+                typeStr.includes("square") ||
+                slugStr.includes("scarf") ||
+                slugStr.includes("square") ||
+                slugStr.includes("modal-silk") ||
+                materialStr.includes("textile")
+            );
+
+        case "perfumes":
+            if (
+                slugStr.includes("diffuser") ||
+                typeStr.includes("diffuser") ||
+                typeStr.includes("wax melt")
+            ) {
+                return false;
+            }
+            return (
+                typeStr.includes("perfume") ||
+                typeStr.includes("fragrance") ||
+                slugStr.includes("perfume") ||
+                slugStr.includes("trilogy") ||
+                slugStr.includes("textile-oil") ||
+                slugStr.includes("breath-of-pines") ||
+                slugStr.includes("summer-held-close") ||
+                slugStr.includes("morning-desk") ||
+                materialStr.includes("botanical fragrance")
+            );
+
+        case "dokra-ornaments":
+            return (
+                typeStr.includes("dokra") ||
+                typeStr.includes("ornament") ||
+                materialStr.includes("dokra") ||
+                slugStr.includes("dokra") ||
+                slugStr.includes("brooch") ||
+                slugStr.includes("handfan") ||
+                slugStr.includes("bell-brooch") ||
+                slugStr.includes("conch-brooch") ||
+                allText.includes("dokra")
+            );
+
+        case "diffusers":
+            return (
+                typeStr.includes("diffuser") ||
+                typeStr.includes("wax melt") ||
+                slugStr.includes("diffuser") ||
+                slugStr.includes("wax-melt") ||
+                slugStr.includes("vessel") ||
+                slugStr.includes("room-stone") ||
+                slugStr.includes("stone-oil")
+            );
+    }
 }
 function productsForStep(products: ProductView[], step: GiftStepKey): ProductView[] {
     return products.filter((product) => isProductForStep(product, step));
@@ -1080,9 +1143,14 @@ export default function BuildGiftClient({
         >
             <div className="mx-auto max-w-[1750px]">
                 <div className="flex flex-wrap items-center justify-between gap-3 border-b border-[#E7DCCD] pb-4">
-                    <span className="font-sans text-[11px] tracking-[0.08em] text-[#8D7B69]">
-                        Build Your Gift
-                    </span>
+                    <Link
+                        href="/gifts"
+                        className="inline-flex items-center gap-1.5 rounded-full border border-[#D7CABA] bg-[#FAF5EC] px-3.5 py-1.5 font-sans text-[11px] font-medium uppercase tracking-[0.14em] text-[#554339] shadow-xs transition-all hover:border-[#2B3B2F] hover:bg-[#2B3B2F] hover:text-[#F6EEE4]"
+                        aria-label="Back to gifts page"
+                    >
+                        <ArrowLeft size={13} />
+                        <span>Back to Gifts</span>
+                    </Link>
                     <Stepper
                         current={stepIndex}
                         countsByStep={countsByStep}

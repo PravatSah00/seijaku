@@ -22,6 +22,7 @@ function addRemotePattern(urlStr: string | undefined) {
 addRemotePattern(process.env.BACKEND_INTERNAL_URL);
 addRemotePattern(process.env.NEXT_PUBLIC_API_URL);
 addRemotePattern(process.env.SITE_URL);
+addRemotePattern("https://seijaku-backend.onrender.com");
 addRemotePattern("http://localhost:4001");
 
 const nextConfig: NextConfig = {
@@ -33,7 +34,7 @@ const nextConfig: NextConfig = {
     return [
       {
         source: "/uploads/:path*",
-        destination: `${process.env.BACKEND_INTERNAL_URL || "http://localhost:4001"}/uploads/:path*`,
+        destination: `${process.env.BACKEND_INTERNAL_URL || "https://seijaku-backend.onrender.com"}/uploads/:path*`,
       },
     ];
   },
