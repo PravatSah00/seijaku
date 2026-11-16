@@ -25,7 +25,7 @@ import type { ProductSelectionPayload } from "../utils";
 
 const INITIAL_BATCH_SIZE = 8;
 const LOAD_MORE_STEP = 8;
-const RAIL_COLLAPSE_STORAGE_KEY = "seijaku.shopFilterRail.collapsed";
+const RAIL_COLLAPSE_STORAGE_KEY = "seijaku.buildGiftFilterRail.collapsed";
 
 function matchesSearch(item: ProductView, query: string) {
     const normalized = query.trim().toLowerCase();
@@ -95,12 +95,13 @@ export default function ProductDrawer({
         : null;
 
     useEffect(() => {
+        // Ensure filter rail is always hidden by default on page load / refresh
+        setIsRailCollapsed(true);
         try {
-            setIsRailCollapsed(
-                localStorage.getItem(RAIL_COLLAPSE_STORAGE_KEY) === "true",
-            );
+            sessionStorage.removeItem(RAIL_COLLAPSE_STORAGE_KEY);
+            localStorage.removeItem(RAIL_COLLAPSE_STORAGE_KEY);
         } catch {
-            // localStorage can be unavailable in restricted/private browsing.
+            // Storage unavailable in restricted/private browsing.
         }
     }, []);
 
@@ -166,15 +167,6 @@ export default function ProductDrawer({
 
     function toggleRailCollapsed(collapsed: boolean) {
         setIsRailCollapsed(collapsed);
-
-        try {
-            localStorage.setItem(
-                RAIL_COLLAPSE_STORAGE_KEY,
-                String(collapsed),
-            );
-        } catch {
-            // Persistence is optional; the UI still works for this session.
-        }
     }
 
     function updateQuery(slug?: string) {
@@ -226,11 +218,11 @@ export default function ProductDrawer({
                 <section className="pb-16 sm:pb-20">
                     <div className="w-full">
                         <div
-                            // className={`grid gap-6 ${
-                            //     isRailCollapsed
-                            //         ? "lg:grid-cols-1"
-                            //         : "lg:grid-cols-[240px_minmax(0,1fr)] lg:gap-8"
-                            // }`}
+                            className={`grid gap-6 ${
+                                isRailCollapsed
+                                    ? "lg:grid-cols-1"
+                                    : "lg:grid-cols-[240px_minmax(0,1fr)] lg:gap-8"
+                            }`}
                         >
                             {!isRailCollapsed && (
                                 <aside className="hidden lg:block">
