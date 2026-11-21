@@ -16,6 +16,8 @@ type ProductDetailDrawerProps = {
   onClose: () => void;
   selectedCountForProduct?: number;
   canAddMore?: boolean;
+  categoryLimitReached?: boolean;
+  categoryRequiredCount?: number;
   onAddGiftProduct?: (product: ProductView, selection?: ProductSelectionPayload) => void;
   onRemoveGiftProduct?: (product: ProductView) => void;
 };
@@ -28,6 +30,8 @@ export default function ProductDetailDrawer({
   onClose,
   selectedCountForProduct = 0,
   canAddMore = true,
+  categoryLimitReached = false,
+  categoryRequiredCount = 1,
   onAddGiftProduct,
   onRemoveGiftProduct,
 }: ProductDetailDrawerProps) {
@@ -283,7 +287,9 @@ export default function ProductDetailDrawer({
             >
               <span>
                 {!canAddMore
-                  ? "Gift Box Full (Max Items Reached)"
+                  ? categoryLimitReached
+                    ? `Category Limit Reached (${categoryRequiredCount}/${categoryRequiredCount} Selected)`
+                    : "Gift Box Full (Max Items Reached)"
                   : isAlreadyInGift
                     ? `+ Add Another with Selected Options`
                     : `+ Add to Gift Box`}

@@ -10,7 +10,10 @@
  * Configurable min/max product limits (default min: 2, max: 3).
  */
 
+import type { GiftCategoryKey } from "@/src/lib/gift-presets";
+
 export type GiftStepKey =
+    | GiftCategoryKey
     | "scarves-and-squares"
     | "perfumes"
     | "dokra-ornaments"

@@ -11,6 +11,8 @@ type CompactProductCardProps = {
     item: ProductView;
     selectedCountForProduct: number;
     canAddMore: boolean;
+    categoryLimitReached?: boolean;
+    categoryRequiredCount?: number;
     onAddGiftProduct: (item: ProductView, selection?: ProductSelectionPayload) => void;
     onRemoveGiftProduct: (item: ProductView) => void;
     onViewDetails: (slug: string) => void;
@@ -20,6 +22,8 @@ export default function CompactProductCard({
     item,
     selectedCountForProduct,
     canAddMore,
+    categoryLimitReached = false,
+    categoryRequiredCount = 1,
     onAddGiftProduct,
     onRemoveGiftProduct,
     onViewDetails,
@@ -110,7 +114,7 @@ export default function CompactProductCard({
                                         disabled={!canAddMore}
                                         onClick={() => onViewDetails(item.slug)}
                                         className="rounded-lg border border-[#4A6350] px-2.5 py-1 text-[10px] font-medium uppercase tracking-wider text-[#2B3B2F] transition-colors hover:bg-[#4A6350] hover:text-[#F6EEE4] disabled:cursor-not-allowed disabled:opacity-40"
-                                        title={canAddMore ? "Add another with options" : "Gift box is full"}
+                                        title={canAddMore ? "Add another with options" : categoryLimitReached ? `Category requirement reached (${categoryRequiredCount} max)` : "Gift box is full"}
                                     >
                                         + Options
                                     </button>
@@ -130,8 +134,15 @@ export default function CompactProductCard({
                                 disabled={!canAddMore}
                                 onClick={() => onViewDetails(item.slug)}
                                 className="flex w-full items-center justify-between gap-2 rounded-lg border border-[#d8cdc0] bg-[#e8ded0]/60 px-3 py-2 text-[11px] font-medium uppercase tracking-[0.14em] text-[#4c4238] transition-all hover:bg-[#e8ded0] disabled:cursor-not-allowed disabled:opacity-40"
+                                title={!canAddMore && categoryLimitReached ? `Category requirement of ${categoryRequiredCount} fulfilled` : undefined}
                             >
-                                <span>{canAddMore ? "Select Options" : "Gift Box Full"}</span>
+                                <span>
+                                    {canAddMore
+                                        ? "Select Options"
+                                        : categoryLimitReached
+                                            ? `${categoryRequiredCount}/${categoryRequiredCount} Selected`
+                                            : "Gift Box Full"}
+                                </span>
                                 <span aria-hidden>→</span>
                             </button>
                         )
@@ -154,7 +165,7 @@ export default function CompactProductCard({
                                     disabled={!canAddMore}
                                     onClick={() => onAddGiftProduct(item)}
                                     className="flex h-7 w-7 items-center justify-center rounded-md border border-[#4A6350] bg-[#4A6350] text-[13px] font-bold text-[#F6EEE4] transition-colors hover:bg-[#3D5242] disabled:cursor-not-allowed disabled:opacity-40"
-                                    title={canAddMore ? "Add another" : "Gift box is full"}
+                                    title={canAddMore ? "Add another" : categoryLimitReached ? `Category requirement reached (${categoryRequiredCount} max)` : "Gift box is full"}
                                 >
                                     +
                                 </button>
@@ -166,9 +177,14 @@ export default function CompactProductCard({
                             disabled={!canAddMore}
                             onClick={() => onAddGiftProduct(item)}
                             className="flex w-full items-center justify-center gap-2 rounded-lg bg-[#EFE5D8] px-3 py-2 text-[11px] font-medium uppercase tracking-[0.14em] text-[#2B3B2F] transition-all hover:bg-[#E2D4C3] disabled:cursor-not-allowed disabled:opacity-40"
+                            title={!canAddMore && categoryLimitReached ? `Category requirement of ${categoryRequiredCount} fulfilled` : undefined}
                         >
                             <span>
-                                {canAddMore ? "+ Add to Gift Box" : "Gift Box Full"}
+                                {canAddMore
+                                    ? "+ Add to Gift Box"
+                                    : categoryLimitReached
+                                        ? `${categoryRequiredCount}/${categoryRequiredCount} Selected`
+                                        : "Gift Box Full"}
                             </span>
                         </button>
                     )}

@@ -64,6 +64,12 @@ type ProductDrawerProps = {
     products: ProductView[];
     selectedCountsByProductId: Record<string, number>;
     canAddMore: boolean;
+    categoryLimitReached?: boolean;
+    categoryRequiredCount?: number;
+    categoryCurrentCount?: number;
+    categoryLabel?: string;
+    hasNextStep?: boolean;
+    onNextStep?: () => void;
     onAddProduct: (product: ProductView, selection?: ProductSelectionPayload) => void;
     onRemoveProduct: (product: ProductView) => void;
 };
@@ -72,6 +78,12 @@ export default function ProductDrawer({
     products,
     selectedCountsByProductId,
     canAddMore,
+    categoryLimitReached = false,
+    categoryRequiredCount = 1,
+    categoryCurrentCount = 0,
+    categoryLabel,
+    hasNextStep = false,
+    onNextStep,
     onAddProduct,
     onRemoveProduct,
 }: ProductDrawerProps) {
@@ -284,6 +296,29 @@ export default function ProductDrawer({
                                     />
                                 </div>
 
+                                {categoryLimitReached && (
+                                    <div className="mt-6 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 rounded-xl border border-[#4A6350]/30 bg-[#4A6350]/10 px-4 py-3 font-sans text-[12px] text-[#2B3B2F] shadow-xs">
+                                        <div className="flex items-center gap-2.5">
+                                            <span className="flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-[#4A6350] text-[#F6EEE4] text-[11px] font-bold">
+                                                ✓
+                                            </span>
+                                            <span>
+                                                <strong>{categoryRequiredCount} of {categoryRequiredCount} {categoryLabel || "items"} selected.</strong>{" "}
+                                                Category limit reached. To choose a different product, remove the selected item below.
+                                            </span>
+                                        </div>
+                                        {hasNextStep && onNextStep && (
+                                            <button
+                                                type="button"
+                                                onClick={onNextStep}
+                                                className="shrink-0 self-start sm:self-auto rounded-lg bg-[#2B3B2F] px-3.5 py-1.5 text-[11px] font-medium uppercase tracking-wider text-[#F6EEE4] transition-colors hover:bg-[#1E2B22] shadow-xs"
+                                            >
+                                                Next Step →
+                                            </button>
+                                        )}
+                                    </div>
+                                )}
+
                                 {visibleProducts.length === 0 ? (
                                     <div className="mt-8 rounded-[28px] border border-[rgba(111,100,86,0.11)] bg-[linear-gradient(180deg,#fbf8f2_0%,#f7f1e8_100%)] px-7 py-10 text-center sm:px-10 sm:py-12">
                                         <p className="font-serif text-[30px] leading-[1.14] tracking-[-0.02em] text-[#1f1a16]">
@@ -309,6 +344,8 @@ export default function ProductDrawer({
                                                             countForProduct
                                                         }
                                                         canAddMore={canAddMore}
+                                                        categoryLimitReached={categoryLimitReached}
+                                                        categoryRequiredCount={categoryRequiredCount}
                                                         onAddGiftProduct={
                                                             onAddProduct
                                                         }
@@ -364,6 +401,8 @@ export default function ProductDrawer({
                         : 0
                 }
                 canAddMore={canAddMore}
+                categoryLimitReached={categoryLimitReached}
+                categoryRequiredCount={categoryRequiredCount}
                 onAddGiftProduct={onAddProduct}
                 onRemoveGiftProduct={onRemoveProduct}
             />
