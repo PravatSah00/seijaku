@@ -6,6 +6,7 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { ArrowLeft, Check, Plus, Trash2 } from "lucide-react";
 import ProductDrawer from "./ProductDrawer";
+import { triggerPageLoader } from "@/src/components/PageTransitionLoader";
 import { useShopState, isGiftCartItem } from "@/src/components/shop/ShopStateProvider";
 import {
     clearStoredGiftItems,
@@ -1268,6 +1269,7 @@ export default function BuildGiftClient({
             }));
             syncGiftBundleToCart(cartPayloads);
             // 4. Navigate to checkout with gift query parameter
+            triggerPageLoader();
             router.push("/checkout?gift=true");
         } catch (error) {
             console.error("Failed to proceed to checkout.", error);
