@@ -26,15 +26,8 @@ export default function TextileProductCard({
   description,
   pairingLabel,
   pairingHref,
-  selectorLabel,
-  selectorOptions,
-  selectedOption = "",
-  onSelectOption,
   onViewDetails,
 }: TextileProductCardProps) {
-  const hasSelector = Boolean(selectorLabel && selectorOptions?.length && onSelectOption);
-  const isActionReady = hasSelector ? Boolean(selectedOption) : true;
-  const selectId = `${item.slug}-selector`;
 
   return (
     <article className="group mx-auto flex h-full w-full max-w-[360px] flex-col overflow-hidden rounded-[14px] border border-[rgba(86,76,64,0.08)] bg-[linear-gradient(180deg,rgba(250,247,241,0.94)_0%,rgba(246,240,232,0.98)_100%)] shadow-[0_10px_24px_rgba(41,34,27,0.035)] transition-all duration-300 hover:-translate-y-[3px] hover:shadow-[0_18px_30px_rgba(41,34,27,0.06)]">
@@ -81,42 +74,10 @@ export default function TextileProductCard({
 
         <p className="mt-5 text-[14px] text-[#312b25]">{item.priceLabel}</p>
 
-        {hasSelector ? (
-          <div className="mt-6">
-            <label htmlFor={selectId} className="mb-2 block text-[10px] uppercase tracking-[0.24em] text-[#837260]">
-              {selectorLabel}
-            </label>
-            <select
-              id={selectId}
-              value={selectedOption}
-              onChange={(event) => onSelectOption?.(event.target.value)}
-              className="w-full rounded-[14px] border border-[rgba(86,76,64,0.12)] bg-[#fbf8f3] px-4 py-3 text-[14px] text-[#3f3831] outline-none transition-colors focus:border-[#2e4a36] focus:ring-2 focus:ring-[#2e4a36]/15"
-            >
-              <option value="">Select an option</option>
-              {selectorOptions?.map((option) => (
-                <option key={option} value={option}>
-                  {option}
-                </option>
-              ))}
-            </select>
-          </div>
-        ) : null}
-
         <ShopProductActions
           className="mt-7"
           item={item}
           onViewDetails={onViewDetails}
-          isBuyDisabled={!isActionReady}
-          selection={
-            hasSelector
-              ? {
-                  label: selectedOption,
-                  options: {
-                    [selectorLabel ?? "selection"]: selectedOption,
-                  },
-                }
-              : undefined
-          }
         />
       </div>
     </article>
