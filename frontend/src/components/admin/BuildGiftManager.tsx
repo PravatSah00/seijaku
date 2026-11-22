@@ -467,11 +467,10 @@ export default function BuildGiftManager({ initialProducts, initialSettings }: B
         <button
           type="button"
           onClick={() => setActiveTab("curation")}
-          className={`flex items-center gap-2 border-b-2 px-5 py-3 font-sans text-[13px] font-medium transition-colors ${
-            activeTab === "curation"
+          className={`flex items-center gap-2 border-b-2 px-5 py-3 font-sans text-[13px] font-medium transition-colors ${activeTab === "curation"
               ? "border-[#2d2824] text-[#2d2824]"
               : "border-transparent text-[#7b7064] hover:text-[#2d2824]"
-          }`}
+            }`}
         >
           <Layers className="h-4 w-4" />
           <span>Curate Category Products</span>
@@ -479,11 +478,10 @@ export default function BuildGiftManager({ initialProducts, initialSettings }: B
         <button
           type="button"
           onClick={() => setActiveTab("presets")}
-          className={`flex items-center gap-2 border-b-2 px-5 py-3 font-sans text-[13px] font-medium transition-colors ${
-            activeTab === "presets"
+          className={`flex items-center gap-2 border-b-2 px-5 py-3 font-sans text-[13px] font-medium transition-colors ${activeTab === "presets"
               ? "border-[#2d2824] text-[#2d2824]"
               : "border-transparent text-[#7b7064] hover:text-[#2d2824]"
-          }`}
+            }`}
         >
           <Gift className="h-4 w-4" />
           <span>Gift Box Rituals (Three Ways to Gift)</span>
@@ -492,11 +490,11 @@ export default function BuildGiftManager({ initialProducts, initialSettings }: B
 
       {/* TAB 1: CURATE PRODUCTS */}
       {activeTab === "curation" && (
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+        <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-5">
           {SECTIONS.map((sec) => {
             const sectionItems = sectionProductsMap.get(sec.key) ?? [];
             return (
-              <AdminCard key={sec.key}>
+              <AdminCard key={sec.key} className="p-4 sm:p-5">
                 <div className="flex items-start justify-between border-b border-[#e2d7c7] pb-3">
                   <div>
                     <div className="flex items-center gap-2">
@@ -525,7 +523,7 @@ export default function BuildGiftManager({ initialProducts, initialSettings }: B
                 </div>
 
                 {/* Product list */}
-                <div className="mt-3 divide-y divide-[#ece4d6] max-h-[380px] overflow-y-auto pr-1">
+                <div className="mt-3.5 space-y-2.5 max-h-[460px] overflow-y-auto pr-1">
                   {sectionItems.length === 0 ? (
                     <div className="py-8 text-center text-[12px] text-[#8a8075]">
                       <p>No products assigned yet.</p>
@@ -546,75 +544,92 @@ export default function BuildGiftManager({ initialProducts, initialSettings }: B
                       return (
                         <div
                           key={product.id}
-                          className="flex items-center justify-between py-2 text-[12px] gap-2 rounded-md px-1 hover:bg-[#f7f2ea]/60 transition-colors"
+                          className="rounded-xl border border-[#e3d8cb] bg-[#faf6f0] p-2.5 transition-all hover:border-[#cbbaaa] hover:shadow-xs space-y-2"
                         >
-                          <div className="flex items-center gap-2 min-w-0">
+                          {/* Top: Position badge, thumbnail, full title, price, and delete */}
+                          <div className="flex items-start gap-2.5">
                             <span
-                              className="flex h-5 w-5 shrink-0 items-center justify-center rounded bg-[#ece4d6] font-mono text-[10px] font-semibold text-[#6a5d50]"
+                              className="mt-0.5 flex h-5 w-5 shrink-0 items-center justify-center rounded bg-[#e8ded2] font-mono text-[10px] font-bold text-[#5c4e40]"
                               title={`Sequence position ${pIdx + 1}`}
                             >
                               {pIdx + 1}
                             </span>
-                            <div className="relative h-9 w-9 shrink-0 overflow-hidden rounded bg-[#ece4d6]">
+                            <div className="relative h-11 w-11 shrink-0 overflow-hidden rounded-lg bg-[#e8ded2] border border-[#dcd1c3]">
                               <Image
                                 src={image}
                                 alt={product.title}
                                 fill
-                                sizes="36px"
+                                sizes="44px"
                                 className="object-cover"
+                                unoptimized
                               />
                             </div>
-                            <div className="min-w-0">
-                              <p className="truncate font-medium text-[#2d2824]">{product.title}</p>
-                              <p className="text-[10px] text-[#8a8075]">₹{product.priceAmount.toLocaleString("en-IN")}</p>
+                            <div className="min-w-0 flex-1">
+                              <p className="font-serif text-[13px] font-medium leading-snug text-[#2d2824]">
+                                {product.title}
+                              </p>
+                              <p className="mt-0.5 font-sans text-[11px] font-medium text-[#7a6d5f]">
+                                ₹{product.priceAmount.toLocaleString("en-IN")}
+                              </p>
                             </div>
-                          </div>
-
-                          <div className="flex items-center gap-1 shrink-0">
-                            {/* Reorder Buttons */}
-                            <div className="flex items-center rounded border border-[#d6c7b4] bg-white overflow-hidden shadow-2xs">
-                              <button
-                                type="button"
-                                disabled={pIdx === 0}
-                                onClick={() => handleReorder(sec.key, pIdx, pIdx - 1)}
-                                className="p-1 text-[#6a5d50] hover:bg-[#ece4d6] disabled:opacity-25 disabled:hover:bg-transparent transition-colors"
-                                title="Move up in sequence"
-                              >
-                                <ArrowUp className="h-3 w-3" />
-                              </button>
-                              <div className="h-3 w-[1px] bg-[#d6c7b4]" />
-                              <button
-                                type="button"
-                                disabled={pIdx === sectionItems.length - 1}
-                                onClick={() => handleReorder(sec.key, pIdx, pIdx + 1)}
-                                className="p-1 text-[#6a5d50] hover:bg-[#ece4d6] disabled:opacity-25 disabled:hover:bg-transparent transition-colors"
-                                title="Move down in sequence"
-                              >
-                                <ArrowDown className="h-3 w-3" />
-                              </button>
-                            </div>
-
-                            <select
-                              value={sec.key}
-                              onChange={(e) => handleMove(product.id, e.target.value as GiftCategoryKey)}
-                              className="rounded border border-[#d6c7b4] bg-white px-1.5 py-0.5 text-[10px] text-[#4a3f35] focus:outline-none"
-                              title="Move to another section"
-                            >
-                              {SECTIONS.map((s) => (
-                                <option key={s.key} value={s.key}>
-                                  {s.label}
-                                </option>
-                              ))}
-                            </select>
-
                             <button
                               type="button"
                               onClick={() => handleRemove(product.id, sec.key)}
-                              className="rounded p-1 text-[#8a8075] hover:bg-[#ebd9d9] hover:text-[#8c2e2e] transition-colors"
-                              title="Remove from section"
+                              className="shrink-0 rounded-md p-1.5 text-[#9b8f82] hover:bg-[#ebd9d9] hover:text-[#8c2e2e] transition-colors"
+                              title="Remove from this category"
                             >
                               <Trash2 className="h-3.5 w-3.5" />
                             </button>
+                          </div>
+
+                          {/* Bottom Row: Reorder Sequence Buttons + Move Category Selector */}
+                          <div className="flex items-center justify-between gap-2 pt-1.5 border-t border-[#ebd9c7]/80">
+                            {/* Sequence order Up / Down */}
+                            <div className="flex items-center gap-1">
+                              <span className="text-[10px] uppercase font-sans tracking-wider text-[#8a7c6e] font-semibold">
+                                Order:
+                              </span>
+                              <div className="inline-flex rounded-md border border-[#d1c2b0] bg-white overflow-hidden shadow-2xs">
+                                <button
+                                  type="button"
+                                  disabled={pIdx === 0}
+                                  onClick={() => handleReorder(sec.key, pIdx, pIdx - 1)}
+                                  className="px-2 py-1 text-[#4a3e33] hover:bg-[#ede3d5] disabled:opacity-30 disabled:hover:bg-transparent transition-colors flex items-center gap-1 text-[11px] font-medium"
+                                  title="Move up in sequence"
+                                >
+                                  <ArrowUp className="h-3 w-3" />
+                                  <span className="text-[10px]">Up</span>
+                                </button>
+                                <div className="w-[1px] bg-[#d1c2b0]" />
+                                <button
+                                  type="button"
+                                  disabled={pIdx === sectionItems.length - 1}
+                                  onClick={() => handleReorder(sec.key, pIdx, pIdx + 1)}
+                                  className="px-2 py-1 text-[#4a3e33] hover:bg-[#ede3d5] disabled:opacity-30 disabled:hover:bg-transparent transition-colors flex items-center gap-1 text-[11px] font-medium"
+                                  title="Move down in sequence"
+                                >
+                                  <ArrowDown className="h-3 w-3" />
+                                  <span className="text-[10px]">Down</span>
+                                </button>
+                              </div>
+                            </div>
+                          </div>
+
+                          <div className="flex items-center justify-between gap-2 pt-1.5 border-t border-[#ebd9c7]/80">
+                            <div className="flex items-center gap-1 min-w-0 w-full">
+                              <select
+                                value={sec.key}
+                                onChange={(e) => handleMove(product.id, e.target.value as GiftCategoryKey)}
+                                className="w-full rounded-md border border-[#d1c2b0] bg-white px-2 py-1 text-[11px] text-[#4a3e33] focus:outline-none shadow-2xs"
+                                title="Move to another category"
+                              >
+                                {SECTIONS.map((s) => (
+                                  <option key={s.key} value={s.key}>
+                                    Move: {s.label}
+                                  </option>
+                                ))}
+                              </select>
+                            </div>
                           </div>
                         </div>
                       );
@@ -843,19 +858,20 @@ export default function BuildGiftManager({ initialProducts, initialSettings }: B
                       key={p.id}
                       className="flex items-center justify-between py-3 gap-3"
                     >
-                      <div className="flex items-center gap-3 min-w-0">
-                        <div className="relative h-11 w-11 shrink-0 overflow-hidden rounded bg-[#ece4d6]">
+                      <div className="flex items-center gap-3 min-w-0 flex-1">
+                        <div className="relative h-11 w-11 shrink-0 overflow-hidden rounded-lg bg-[#ece4d6] border border-[#dcd1c3]">
                           <Image
                             src={image}
                             alt={p.title}
                             fill
                             sizes="44px"
                             className="object-cover"
+                            unoptimized
                           />
                         </div>
-                        <div className="min-w-0">
-                          <p className="font-medium text-[#2d2824] text-[13px] truncate">{p.title}</p>
-                          <p className="text-[11px] text-[#7b7064]">
+                        <div className="min-w-0 flex-1">
+                          <p className="font-medium text-[#2d2824] text-[13px] leading-snug break-words">{p.title}</p>
+                          <p className="mt-0.5 text-[11px] text-[#7b7064]">
                             {p.type} &middot; ₹{p.priceAmount.toLocaleString("en-IN")}
                           </p>
                         </div>
