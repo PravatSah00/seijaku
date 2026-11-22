@@ -237,3 +237,9 @@ export function triggerPageLoader() {
     window.dispatchEvent(new CustomEvent("seijaku-route-start"));
   }
 }
+
+export function stopPageLoader() {
+  if (typeof window !== "undefined") {
+    window.dispatchEvent(new CustomEvent("seijaku-route-end"));
+  }
+}

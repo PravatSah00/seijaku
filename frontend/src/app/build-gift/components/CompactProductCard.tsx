@@ -1,7 +1,7 @@
 "use client";
 
 import Image from "next/image";
-import { Heart } from "lucide-react";
+import { Heart, Loader2 } from "lucide-react";
 
 import { hasVariantSelector, type ProductView } from "@/src/lib/product-types";
 import { useShopState } from "@/src/components/shop/ShopStateProvider";
@@ -13,6 +13,7 @@ type CompactProductCardProps = {
     canAddMore: boolean;
     categoryLimitReached?: boolean;
     categoryRequiredCount?: number;
+    isLoadingDetails?: boolean;
     onAddGiftProduct: (item: ProductView, selection?: ProductSelectionPayload) => void;
     onRemoveGiftProduct: (item: ProductView) => void;
     onViewDetails: (slug: string) => void;
@@ -24,6 +25,7 @@ export default function CompactProductCard({
     canAddMore,
     categoryLimitReached = false,
     categoryRequiredCount = 1,
+    isLoadingDetails = false,
     onAddGiftProduct,
     onRemoveGiftProduct,
     onViewDetails,
@@ -64,6 +66,7 @@ export default function CompactProductCard({
 
             <button
                 type="button"
+                disabled={isLoadingDetails}
                 onClick={() => onViewDetails(item.slug)}
                 className="block w-full text-left focus-visible:outline-none"
             >
@@ -76,6 +79,18 @@ export default function CompactProductCard({
                         className="object-cover transition-transform duration-500 group-hover:scale-[1.015]"
                     />
                     <div className="pointer-events-none absolute inset-0 bg-[linear-gradient(180deg,rgba(28,24,20,0)_58%,rgba(28,24,20,0.08)_100%)]" />
+
+                    {/* Modern product details loading overlay */}
+                    {isLoadingDetails && (
+                        <div className="absolute inset-0 z-20 flex flex-col items-center justify-center bg-[#FAF5EC]/85 backdrop-blur-[2px] transition-all animate-in fade-in">
+                            <div className="flex h-10 w-10 items-center justify-center rounded-full bg-[#2B3B2F] text-[#FAF5EC] shadow-md">
+                                <Loader2 className="h-5 w-5 animate-spin text-[#C2A26F]" />
+                            </div>
+                            <span className="mt-2 rounded-full bg-[#2B3B2F]/10 px-2.5 py-0.5 font-serif text-[11px] font-medium tracking-wide text-[#2B3B2F]">
+                                Opening details...
+                            </span>
+                        </div>
+                    )}
                 </div>
             </button>
 
@@ -84,9 +99,14 @@ export default function CompactProductCard({
                     {item.type}
                 </p>
 
-                <h2 className="mt-2 font-serif text-[18px] leading-[1.12] tracking-[-0.022em] text-[#1f1a16]">
+                <button
+                    type="button"
+                    disabled={isLoadingDetails}
+                    onClick={() => onViewDetails(item.slug)}
+                    className="mt-2 block text-left font-serif text-[18px] leading-[1.12] tracking-[-0.022em] text-[#1f1a16] hover:text-[#4A6350] transition-colors focus-visible:outline-none"
+                >
                     {item.title}
-                </h2>
+                </button>
 
                 {/* <p className="mt-2 line-clamp-2 min-h-[2.9rem] text-[13px] leading-[1.68] text-[#625a51]">
                     {item.shortDescription || "Quietly composed Seijaku object."}

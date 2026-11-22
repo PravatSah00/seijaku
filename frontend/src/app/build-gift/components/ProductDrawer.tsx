@@ -3,6 +3,7 @@
 import { PanelLeftOpen, SlidersHorizontal } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
+import { triggerPageLoader, stopPageLoader } from "@/src/components/PageTransitionLoader";
 
 import {
     getShopPrices,
@@ -109,11 +110,19 @@ export default function ProductDrawer({
     const [visibleCount, setVisibleCount] = useState(INITIAL_BATCH_SIZE);
     const [isRailCollapsed, setIsRailCollapsed] = useState(true);
     const [isFilterDrawerOpen, setIsFilterDrawerOpen] = useState(false);
+    const [loadingProductSlug, setLoadingProductSlug] = useState<string | null>(null);
 
     const detailSlug = searchParams.get("item");
     const detailProduct = detailSlug
         ? products.find((product) => product.slug === detailSlug) ?? null
         : null;
+
+    useEffect(() => {
+        if (detailProduct && loadingProductSlug) {
+            setLoadingProductSlug(null);
+            stopPageLoader();
+        }
+    }, [detailProduct, loadingProductSlug]);
 
     useEffect(() => {
         // Ensure filter rail is always hidden by default on page load / refresh
@@ -200,6 +209,23 @@ export default function ProductDrawer({
         router.replace(query ? `${pathname}?${query}` : pathname, {
             scroll: false,
         });
+    }
+
+    function handleViewDetails(slug: string) {
+        setLoadingProductSlug(slug);
+        triggerPageLoader();
+        updateQuery(slug);
+
+        // Safety fallback timeout
+        setTimeout(() => {
+            setLoadingProductSlug((current) => {
+                if (current === slug) {
+                    stopPageLoader();
+                    return null;
+                }
+                return current;
+            });
+        }, 3000);
     }
 
     const filterRailProps = {
@@ -355,6 +381,7 @@ export default function ProductDrawer({
                                                         canAddMore={canAddMore}
                                                         categoryLimitReached={categoryLimitReached}
                                                         categoryRequiredCount={categoryRequiredCount}
+                                                        isLoadingDetails={loadingProductSlug === product.slug}
                                                         onAddGiftProduct={
                                                             onAddProduct
                                                         }
@@ -362,7 +389,7 @@ export default function ProductDrawer({
                                                             onRemoveProduct
                                                         }
                                                         onViewDetails={
-                                                            updateQuery
+                                                            handleViewDetails
                                                         }
                                                     />
                                                 );
@@ -403,7 +430,11 @@ export default function ProductDrawer({
             <ProductDetailDrawer
                 item={detailProduct}
                 isOpen={Boolean(detailProduct)}
-                onClose={() => updateQuery()}
+                onClose={() => {
+                    setLoadingProductSlug(null);
+                    stopPageLoader();
+                    updateQuery();
+                }}
                 selectedCountForProduct={
                     detailProduct
                         ? (selectedCountsByProductId[detailProduct.id] ?? 0)

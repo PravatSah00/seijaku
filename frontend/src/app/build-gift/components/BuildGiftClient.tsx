@@ -3,10 +3,11 @@
 import type { ProductView } from "@/src/lib/product-types";
 import { Fragment, useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
+import Image from "next/image";
 import { useRouter } from "next/navigation";
-import { ArrowLeft, Check, Plus, Trash2 } from "lucide-react";
+import { ArrowLeft, Check, Plus, Trash2, Loader2 } from "lucide-react";
 import ProductDrawer from "./ProductDrawer";
-import { triggerPageLoader } from "@/src/components/PageTransitionLoader";
+import { triggerPageLoader, stopPageLoader } from "@/src/components/PageTransitionLoader";
 import { useShopState, isGiftCartItem } from "@/src/components/shop/ShopStateProvider";
 import {
     clearStoredGiftItems,
@@ -69,48 +70,66 @@ function productsForStep(products: ProductView[], stepKey: GiftCategoryKey): Pro
 function PresetSwitcher({
     presets,
     activePresetId,
+    isSwitching = false,
+    targetPresetId = null,
     onSelect,
 }: {
     presets: GiftPreset[];
     activePresetId: string;
+    isSwitching?: boolean;
+    targetPresetId?: string | null;
     onSelect: (preset: GiftPreset) => void;
 }) {
     return (
-        <section aria-label="Curated Gift Rituals" className="mt-3 sm:mt-4 rounded-xl border border-[#E7DCCD] bg-[#FAF5EC] p-3 sm:p-4 shadow-2xs">
+        <section aria-label="Curated Gift Rituals" className="mt-3 sm:mt-4 rounded-xl border border-[#E7DCCD] bg-[#FAF5EC] p-3 sm:p-4 shadow-2xs relative overflow-hidden">
             <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-1 border-b border-[#E7DCCD]/60 pb-2.5 mb-3">
-                <div>
-                    <span className="font-sans text-[10px] font-medium uppercase tracking-[0.16em] text-[#8C7A6E]">
-                        Choose Your Gift Ritual
-                    </span>
-                    <h2 className="text-[16px] sm:text-[18px] font-normal text-[#2A1D1B]">
-                        Three ways to gift. Endless ways to make it personal.
-                    </h2>
+                <div className="flex items-center gap-2">
+                    <div>
+                        <span className="font-sans text-[10px] font-medium uppercase tracking-[0.16em] text-[#8C7A6E]">
+                            Choose Your Gift Ritual
+                        </span>
+                        <h2 className="text-[16px] sm:text-[18px] font-normal text-[#2A1D1B]">
+                            Three ways to gift. Endless ways to make it personal.
+                        </h2>
+                    </div>
                 </div>
-                <span className="font-sans text-[11px] text-[#6E5A4E] shrink-0">
-                    Curated Seijaku Rituals
-                </span>
+                <div className="flex items-center gap-2 shrink-0">
+                    {isSwitching && (
+                        <span className="flex items-center gap-1.5 rounded-full bg-[#2B3B2F]/10 px-2.5 py-1 text-[11px] font-medium text-[#2B3B2F] animate-pulse">
+                            <Loader2 className="h-3 w-3 animate-spin" />
+                            <span>Updating ritual...</span>
+                        </span>
+                    )}
+                    <span className="font-sans text-[11px] text-[#6E5A4E]">
+                        Curated Seijaku Rituals
+                    </span>
+                </div>
             </div>
             <div className="grid grid-cols-1 sm:grid-cols-3 gap-2.5">
                 {presets.map((preset) => {
                     const isActive = preset.id === activePresetId;
+                    const isTargetLoading = isSwitching && preset.id === targetPresetId;
                     return (
                         <button
                             key={preset.id}
                             type="button"
+                            disabled={isSwitching}
                             onClick={() => onSelect(preset)}
-                            className={`group flex flex-col items-start p-3 text-left rounded-lg border transition-all cursor-pointer ${
+                            className={`group flex flex-col items-start p-3 text-left rounded-lg border transition-all cursor-pointer relative ${
                                 isActive
                                     ? "border-[#2B3B2F] bg-[#2B3B2F] text-[#FAF5EC] shadow-sm"
                                     : "border-[#E3D4C4] bg-[#FBF8F2] hover:bg-[#F2E8DC]/80 hover:border-[#C9B9A6] text-[#2A1D1B]"
-                            }`}
+                            } ${isSwitching && !isActive && !isTargetLoading ? "opacity-60 cursor-not-allowed" : ""}`}
                         >
                             <span className="flex items-center justify-between w-full">
                                 <span className={`text-[15px] font-normal font-serif ${isActive ? "text-[#FAF5EC]" : "text-[#2A1D1B]"}`}>
                                     {preset.title}
                                 </span>
-                                {isActive && (
+                                {isTargetLoading ? (
+                                    <Loader2 className="h-3.5 w-3.5 animate-spin text-[#C2A26F]" />
+                                ) : isActive ? (
                                     <span className="h-2 w-2 rounded-full bg-[#E5D7C2]" />
-                                )}
+                                ) : null}
                             </span>
                             <span className={`text-[11px] font-sans mt-0.5 line-clamp-1 ${isActive ? "text-[#D8C7B5]" : "text-[#7A6A5E]"}`}>
                                 {preset.subtitle}
@@ -853,6 +872,9 @@ export default function BuildGiftClient({
     }, [initialPresetId, availablePresets]);
 
     const [presetId, setPresetId] = useState(initialId);
+    const [isPresetLoading, setIsPresetLoading] = useState(false);
+    const [targetPresetId, setTargetPresetId] = useState<string | null>(null);
+    const [targetPresetTitle, setTargetPresetTitle] = useState<string | null>(null);
     const [stepIndex, setStepIndex] = useState(0);
     const [giftItems, setGiftItems] = useState<GiftItemSelection[]>([]);
     const [savedLoaded, setSavedLoaded] = useState(false);
@@ -1114,13 +1136,27 @@ export default function BuildGiftClient({
     const canAccessReview = canCheckout;
 
     function handleSelectPreset(preset: GiftPreset) {
-        if (preset.id === presetId) return;
-        setPresetId(preset.id);
-        setStepIndex(0);
-        // Retain only items whose stepKey matches one of the new preset's steps
-        const allowedKeys = new Set(preset.steps.map((s) => s.key as string));
-        setGiftItems((prev) => prev.filter((i) => allowedKeys.has(i.stepKey)));
-        router.replace(`/build-gift?type=${encodeURIComponent(preset.id)}`, { scroll: false });
+        if (preset.id === presetId || isPresetLoading) return;
+        setIsPresetLoading(true);
+        setTargetPresetId(preset.id);
+        setTargetPresetTitle(preset.title);
+        triggerPageLoader();
+
+        setTimeout(() => {
+            setPresetId(preset.id);
+            setStepIndex(0);
+            // Retain only items whose stepKey matches one of the new preset's steps
+            const allowedKeys = new Set(preset.steps.map((s) => s.key as string));
+            setGiftItems((prev) => prev.filter((i) => allowedKeys.has(i.stepKey)));
+            router.replace(`/build-gift?type=${encodeURIComponent(preset.id)}`, { scroll: false });
+
+            setTimeout(() => {
+                setIsPresetLoading(false);
+                setTargetPresetId(null);
+                setTargetPresetTitle(null);
+                stopPageLoader();
+            }, 300);
+        }, 150);
     }
 
     function addProduct(
@@ -1317,8 +1353,41 @@ export default function BuildGiftClient({
                 <PresetSwitcher
                     presets={availablePresets}
                     activePresetId={activePreset.id}
+                    isSwitching={isPresetLoading}
+                    targetPresetId={targetPresetId}
                     onSelect={handleSelectPreset}
                 />
+
+                <div className="relative min-h-[400px]">
+                    {/* Modern ritual transition loader overlay */}
+                    {isPresetLoading && (
+                        <div
+                            aria-live="polite"
+                            className="absolute inset-0 z-40 flex flex-col items-center justify-center min-h-[380px] rounded-2xl bg-[#FAF5EC]/85 backdrop-blur-[2px] transition-all duration-300 animate-in fade-in"
+                        >
+                            <div className="flex flex-col items-center gap-3.5 rounded-2xl border border-[#D5C6B5] bg-[#FAF5EC] px-8 py-6 shadow-[0_16px_40px_rgba(43,59,47,0.12)]">
+                                <div className="relative flex h-12 w-12 items-center justify-center">
+                                    <div className="absolute h-full w-full rounded-full border-2 border-[#2B3B2F]/15 border-t-[#2B3B2F] animate-spin" />
+                                    <Image
+                                        src="/images/seijaku-emblem-g.png"
+                                        alt=""
+                                        width={20}
+                                        height={20}
+                                        className="h-4 w-4 object-contain"
+                                        unoptimized
+                                    />
+                                </div>
+                                <div className="text-center">
+                                    <p className="font-serif text-[17px] font-normal text-[#2A1D1B]">
+                                        Loading {targetPresetTitle || "Gift Ritual"}...
+                                    </p>
+                                    <p className="mt-1 font-sans text-[11px] text-[#7A6A5E] tracking-wide">
+                                        Curating steps, objects & packaging
+                                    </p>
+                                </div>
+                            </div>
+                        </div>
+                    )}
 
                 {isReview ? (
                     <>
@@ -1408,6 +1477,7 @@ export default function BuildGiftClient({
                         />
                     </div>
                 )}
+                </div>
             </div>
         </main>
     );
