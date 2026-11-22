@@ -49,15 +49,21 @@ function formatPrice(amount: number) {
 }
 
 function productsForStep(products: ProductView[], stepKey: GiftCategoryKey): ProductView[] {
-    // 1. Curated products specifically enabled by admin for this section
+    // 1. Curated products specifically enabled by admin for this section (including legacy section resolution)
     const curated = products.filter(
-        (product) => product.buildGift?.enabled && product.buildGift.section === stepKey,
+        (product) => Boolean(product.buildGift?.enabled) && isProductForCategory(product, stepKey),
     );
-    if (curated.length > 0) {
-        return curated;
-    }
-    // 2. Fallback to smart categorization across published products
-    return products.filter((product) => isProductForCategory(product, stepKey));
+    const list = curated.length > 0
+        ? curated
+        : products.filter((product) => isProductForCategory(product, stepKey));
+
+    // Sort strictly by admin curated sequence (buildGift.order), with fallback to title
+    return list.slice().sort((a, b) => {
+        const orderA = typeof a.buildGift?.order === "number" ? a.buildGift.order : 9999;
+        const orderB = typeof b.buildGift?.order === "number" ? b.buildGift.order : 9999;
+        if (orderA !== orderB) return orderA - orderB;
+        return a.title.localeCompare(b.title);
+    });
 }
 
 function PresetSwitcher({

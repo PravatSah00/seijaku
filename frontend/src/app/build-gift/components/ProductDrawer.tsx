@@ -57,6 +57,15 @@ function sortProducts(items: ProductView[], sortBy: ShopSortOption) {
         return sorted.sort((a, b) => b.price - a.price);
     }
 
+    if (sortBy === "Recommended") {
+        return sorted.sort((a, b) => {
+            const orderA = typeof a.buildGift?.order === "number" ? a.buildGift.order : 9999;
+            const orderB = typeof b.buildGift?.order === "number" ? b.buildGift.order : 9999;
+            if (orderA !== orderB) return orderA - orderB;
+            return a.title.localeCompare(b.title);
+        });
+    }
+
     return sorted;
 }
 

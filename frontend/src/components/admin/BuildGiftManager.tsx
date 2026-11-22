@@ -15,6 +15,8 @@ import {
   Gift,
   RotateCcw,
   Package,
+  ArrowUp,
+  ArrowDown,
 } from "lucide-react";
 import AdminCard from "@/src/components/admin/AdminCard";
 import {
@@ -89,9 +91,9 @@ type BuildGiftManagerProps = {
   initialSettings: SiteSettings;
 };
 
-function getBuildGiftMeta(product: ProductSummary): { enabled: boolean; section: GiftCategoryKey } {
+function getBuildGiftMeta(product: ProductSummary): { enabled: boolean; section: GiftCategoryKey; order?: number } {
   const meta = (product.metadata?.buildGift ?? product.metadata?.build_gift) as
-    | { enabled?: boolean; section?: string }
+    | { enabled?: boolean; section?: string; order?: number }
     | undefined;
 
   let section: GiftCategoryKey = "pocket-squares";
@@ -119,6 +121,7 @@ function getBuildGiftMeta(product: ProductSummary): { enabled: boolean; section:
   return {
     enabled: Boolean(meta?.enabled),
     section,
+    order: typeof meta?.order === "number" ? meta.order : undefined,
   };
 }
 
@@ -152,6 +155,14 @@ export default function BuildGiftManager({ initialProducts, initialSettings }: B
         map.get(section)!.push(product);
       }
     }
+    // Sort each section by curated order
+    for (const [, items] of map.entries()) {
+      items.sort((a, b) => {
+        const orderA = getBuildGiftMeta(a).order ?? 9999;
+        const orderB = getBuildGiftMeta(b).order ?? 9999;
+        return orderA - orderB;
+      });
+    }
     return map;
   }, [products]);
 
@@ -178,17 +189,23 @@ export default function BuildGiftManager({ initialProducts, initialSettings }: B
   async function updateProductGiftMeta(
     productId: string,
     enabled: boolean,
-    section: GiftCategoryKey
+    section: GiftCategoryKey,
+    order?: number
   ) {
     const targetProduct = products.find((p) => p.id === productId);
     if (!targetProduct) return;
 
     const existingMeta = (targetProduct.metadata ?? {}) as Record<string, unknown>;
+    const existingBg = (existingMeta.buildGift ?? existingMeta.build_gift ?? {}) as Record<string, unknown>;
+    const targetOrder = typeof order === "number" ? order : (typeof existingBg.order === "number" ? existingBg.order : undefined);
+
     const updatedMetadata = {
       ...existingMeta,
       buildGift: {
+        ...existingBg,
         enabled,
         section,
+        ...(targetOrder !== undefined ? { order: targetOrder } : {}),
       },
     };
 
@@ -223,21 +240,106 @@ export default function BuildGiftManager({ initialProducts, initialSettings }: B
 
   function handleAdd(productId: string) {
     if (!activeDialogSection) return;
+    const currentSectionItems = sectionProductsMap.get(activeDialogSection) ?? [];
+    const nextOrder = currentSectionItems.length;
     startTransition(async () => {
-      await updateProductGiftMeta(productId, true, activeDialogSection);
+      await updateProductGiftMeta(productId, true, activeDialogSection, nextOrder);
     });
   }
 
   function handleRemove(productId: string, section: GiftCategoryKey) {
     startTransition(async () => {
-      await updateProductGiftMeta(productId, false, section);
+      await updateProductGiftMeta(productId, false, section, undefined);
     });
   }
 
   function handleMove(productId: string, newSection: GiftCategoryKey) {
+    const destItems = sectionProductsMap.get(newSection) ?? [];
+    const nextOrder = destItems.length;
     startTransition(async () => {
-      await updateProductGiftMeta(productId, true, newSection);
+      await updateProductGiftMeta(productId, true, newSection, nextOrder);
     });
+  }
+
+  // Reorder products inside a section (Move Up / Move Down)
+  async function handleReorder(section: GiftCategoryKey, fromIndex: number, toIndex: number) {
+    const currentItems = sectionProductsMap.get(section);
+    if (
+      !currentItems ||
+      fromIndex < 0 ||
+      toIndex < 0 ||
+      fromIndex >= currentItems.length ||
+      toIndex >= currentItems.length ||
+      fromIndex === toIndex
+    ) {
+      return;
+    }
+
+    const reordered = [...currentItems];
+    const [moved] = reordered.splice(fromIndex, 1);
+    reordered.splice(toIndex, 0, moved);
+
+    const updates = reordered.map((item, idx) => ({
+      id: item.id,
+      order: idx,
+    }));
+
+    // Optimistic local update
+    setProducts((prev) =>
+      prev.map((p) => {
+        const u = updates.find((x) => x.id === p.id);
+        if (!u) return p;
+        const existingMeta = (p.metadata ?? {}) as Record<string, unknown>;
+        const existingBg = (existingMeta.buildGift ?? existingMeta.build_gift ?? {}) as Record<string, unknown>;
+        return {
+          ...p,
+          metadata: {
+            ...existingMeta,
+            buildGift: {
+              ...existingBg,
+              enabled: true,
+              section,
+              order: u.order,
+            },
+          },
+        };
+      })
+    );
+
+    try {
+      await Promise.all(
+        updates.map(async (u) => {
+          const target = products.find((p) => p.id === u.id);
+          if (!target) return;
+          const currentOrder = getBuildGiftMeta(target).order;
+          if (currentOrder === u.order) return;
+
+          const existingMeta = (target.metadata ?? {}) as Record<string, unknown>;
+          const existingBg = (existingMeta.buildGift ?? existingMeta.build_gift ?? {}) as Record<string, unknown>;
+          const newMeta = {
+            ...existingMeta,
+            buildGift: {
+              ...existingBg,
+              enabled: true,
+              section,
+              order: u.order,
+            },
+          };
+
+          const res = await fetch(`/api/admin/proxy/products/${u.id}`, {
+            method: "PATCH",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ metadata: newMeta }),
+          });
+          if (!res.ok) throw new Error("Failed to save reorder position.");
+        })
+      );
+      setNotice(`Updated sequence order in ${SECTIONS.find((s) => s.key === section)?.label}.`);
+      setTimeout(() => setNotice(null), 3000);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Error saving product sequence");
+      setTimeout(() => setError(null), 4000);
+    }
   }
 
   // Save gift presets to site settings
@@ -439,14 +541,20 @@ export default function BuildGiftManager({ initialProducts, initialSettings }: B
                       </button>
                     </div>
                   ) : (
-                    sectionItems.map((product) => {
+                    sectionItems.map((product, pIdx) => {
                       const image = product.primaryImage?.url || "/images/Home Page hero image 1.png";
                       return (
                         <div
                           key={product.id}
-                          className="flex items-center justify-between py-2 text-[12px] gap-2"
+                          className="flex items-center justify-between py-2 text-[12px] gap-2 rounded-md px-1 hover:bg-[#f7f2ea]/60 transition-colors"
                         >
-                          <div className="flex items-center gap-2.5 min-w-0">
+                          <div className="flex items-center gap-2 min-w-0">
+                            <span
+                              className="flex h-5 w-5 shrink-0 items-center justify-center rounded bg-[#ece4d6] font-mono text-[10px] font-semibold text-[#6a5d50]"
+                              title={`Sequence position ${pIdx + 1}`}
+                            >
+                              {pIdx + 1}
+                            </span>
                             <div className="relative h-9 w-9 shrink-0 overflow-hidden rounded bg-[#ece4d6]">
                               <Image
                                 src={image}
@@ -463,6 +571,29 @@ export default function BuildGiftManager({ initialProducts, initialSettings }: B
                           </div>
 
                           <div className="flex items-center gap-1 shrink-0">
+                            {/* Reorder Buttons */}
+                            <div className="flex items-center rounded border border-[#d6c7b4] bg-white overflow-hidden shadow-2xs">
+                              <button
+                                type="button"
+                                disabled={pIdx === 0}
+                                onClick={() => handleReorder(sec.key, pIdx, pIdx - 1)}
+                                className="p-1 text-[#6a5d50] hover:bg-[#ece4d6] disabled:opacity-25 disabled:hover:bg-transparent transition-colors"
+                                title="Move up in sequence"
+                              >
+                                <ArrowUp className="h-3 w-3" />
+                              </button>
+                              <div className="h-3 w-[1px] bg-[#d6c7b4]" />
+                              <button
+                                type="button"
+                                disabled={pIdx === sectionItems.length - 1}
+                                onClick={() => handleReorder(sec.key, pIdx, pIdx + 1)}
+                                className="p-1 text-[#6a5d50] hover:bg-[#ece4d6] disabled:opacity-25 disabled:hover:bg-transparent transition-colors"
+                                title="Move down in sequence"
+                              >
+                                <ArrowDown className="h-3 w-3" />
+                              </button>
+                            </div>
+
                             <select
                               value={sec.key}
                               onChange={(e) => handleMove(product.id, e.target.value as GiftCategoryKey)}

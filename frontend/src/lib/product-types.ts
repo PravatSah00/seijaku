@@ -1,6 +1,7 @@
 import { publicBackendJson, type PublicFetchOptions } from "@/src/lib/backend";
 import { cacheTags } from "@/src/lib/cache-tags";
 import type { ShopBridgeSlug } from "@/src/lib/shop-routes";
+import type { GiftCategoryKey } from "@/src/lib/gift-presets";
 import type { ShopItemType, ShopMaterial, ShopUseCase } from "@/src/lib/shop-taxonomy";
 
 // ProductView is the read-only public product shape consumed by every
@@ -32,7 +33,8 @@ export type ProductView = {
   metadata?: Record<string, unknown> | null;
   buildGift?: {
     enabled: boolean;
-    section: ShopBridgeSlug;
+    section: ShopBridgeSlug | GiftCategoryKey;
+    order?: number;
   };
   // Per-product variant pickers (e.g. colour tone, size, blend).
   customizationOptions?: Array<{
@@ -159,18 +161,27 @@ export function normalizeBackendProduct(b: BackendProduct): ProductView | null {
   const imageAlt = b.primaryImage?.altText ?? b.imageAlt ?? undefined;
 
   const rawBuildGift = (b.metadata?.buildGift ?? b.metadata?.build_gift) as
-    | { enabled?: boolean; section?: string }
+    | { enabled?: boolean; section?: string; order?: number }
     | undefined;
+
+  let normalizedSection = rawBuildGift?.section;
+  const productText = `${b.type || ""} ${b.slug || ""} ${b.title || ""}`.toLowerCase();
+  if (normalizedSection === "scarves-and-squares") {
+    normalizedSection = productText.includes("pocket") ? "pocket-squares" : "scarves";
+  } else if (normalizedSection === "diffusers") {
+    normalizedSection = productText.includes("oil") || productText.includes("melt") ? "diffuser-oils" : "diffusers";
+  }
 
   const buildGift = rawBuildGift?.enabled
     ? {
         enabled: true,
-        section: (rawBuildGift.section || b.bridgePages[0]?.slug || "scarves-and-squares") as ShopBridgeSlug,
+        section: (normalizedSection || b.bridgePages[0]?.slug || "scarves-and-squares") as ShopBridgeSlug | GiftCategoryKey,
+        order: typeof rawBuildGift.order === "number" ? rawBuildGift.order : undefined,
       }
     : undefined;
 
   const bridgeCategory = buildGift?.enabled && buildGift.section
-    ? buildGift.section
+    ? (buildGift.section as ProductView["bridgeCategory"])
     : ((b.bridgePages[0]?.slug ?? undefined) as ProductView["bridgeCategory"]);
 
   return {
