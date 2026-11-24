@@ -57,9 +57,10 @@ export function serializeProduct(product: any, serializeOptions?: { isPublic?: b
         values: (option.values ?? [])
           .filter((value: any) => {
             if (!value.isActive) return false;
-            if (isPublic && (value.stock === null || value.stock === undefined || value.stock <= 0)) {
-              return false;
-            }
+            // if (isPublic && (value.stock === null || value.stock === undefined || value.stock <= 0)) {
+            // if (isPublic && (value.stock === null || value.stock === undefined )) {
+            //   return false;
+            // }
             return true;
           })
           .sort((a: any, b: any) => a.sortOrder - b.sortOrder)
