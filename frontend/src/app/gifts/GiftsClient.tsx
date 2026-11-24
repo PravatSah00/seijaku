@@ -80,7 +80,7 @@ export default function GiftsClient({ presets }: { presets: GiftPreset[] }) {
                         </p>
 
                         <h1 className="mt-4 text-[34px] font-medium leading-[1.12] tracking-[-0.005em] text-[#2A1D1B] sm:mt-5 sm:text-[44px] lg:text-[clamp(40px,3.1vw,64px)]">
-                            This Festive Season,
+                            This Winter,
                             <br />
                             Don’t Just Pick a Gift.
                             <br />
@@ -167,7 +167,7 @@ export default function GiftsClient({ presets }: { presets: GiftPreset[] }) {
                                 aria-hidden="true"
                             />
                             <p className="font-sans text-[10px] font-medium uppercase tracking-[0.2em] text-[#4A352F] sm:text-[11px] 2xl:text-[13px]">
-                                The Seijaku Festive Rituals
+                                THE SEIJAKU GIFTING RITUALS
                             </p>
                             <span
                                 className="h-px w-[clamp(20px,8vw,140px)] bg-[#D8C8B7]"
