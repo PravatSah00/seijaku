@@ -97,7 +97,7 @@ export default function DiffusersPageClient({ page, products }: DiffusersPageCli
           </div>
         </section>
 
-        <section className="section-editorial pt-6 sm:pt-8">
+        <section className="section-editorial pt-6 sm:pt-8" data-reveal suppressHydrationWarning>
           <div className="page-container max-w-[980px]">
             <div className="rounded-[28px] border border-[rgba(86,76,64,0.1)] bg-[linear-gradient(180deg,rgba(250,247,241,0.92)_0%,rgba(244,239,231,0.95)_100%)] px-6 py-8 sm:px-10 sm:py-10">
               <p className="text-[10px] uppercase tracking-[0.32em] text-[#8a745e]">Editorial Note</p>

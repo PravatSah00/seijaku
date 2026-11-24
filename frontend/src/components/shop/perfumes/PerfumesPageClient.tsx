@@ -221,7 +221,7 @@ export default function PerfumesPageClient({ page, products }: PerfumesPageClien
         </section>
 
         {page.postCtaTitle ? (
-          <section className="section-editorial pt-4 sm:pt-6">
+          <section className="section-editorial pt-4 sm:pt-6" data-reveal suppressHydrationWarning>
             <div className="page-container max-w-[980px] text-center">
               <h2 className="text-[#1c1c1c]">{page.postCtaTitle}</h2>
               {page.postCtaDescription ? (

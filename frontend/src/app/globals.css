@@ -656,3 +656,47 @@ main:not(.home-story):not(.seasonaldrops-page) > section.section-editorial::befo
     line-height: 1.5;
   }
 }
+
+/* Seijaku Luxury Loading & Shimmer Animations */
+@keyframes seijaku-shimmer {
+  0% {
+    transform: translateX(-100%);
+  }
+  100% {
+    transform: translateX(100%);
+  }
+}
+
+@keyframes seijaku-pulse-subtle {
+  0%, 100% {
+    opacity: 1;
+    transform: scale(1);
+  }
+  50% {
+    opacity: 0.65;
+    transform: scale(0.97);
+  }
+}
+
+.animate-seijaku-shimmer {
+  position: relative;
+  overflow: hidden;
+}
+
+.animate-seijaku-shimmer::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  transform: translateX(-100%);
+  background: linear-gradient(
+    90deg,
+    rgba(255, 255, 255, 0) 0%,
+    rgba(255, 255, 255, 0.45) 50%,
+    rgba(255, 255, 255, 0) 100%
+  );
+  animation: seijaku-shimmer 1.8s infinite ease-in-out;
+}
+
+.animate-seijaku-pulse {
+  animation: seijaku-pulse-subtle 2.4s ease-in-out infinite;
+}

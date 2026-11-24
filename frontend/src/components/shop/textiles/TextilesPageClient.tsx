@@ -23,12 +23,9 @@ function isPocketSquare(product: ProductView): boolean {
 }
 
 function buildDisplayItem(product: ProductView): TextileDisplayItem {
-  const firstOption = product.customizationOptions?.[0];
   return {
     product,
     description: product.shortDescription ?? "",
-    selectorLabel: firstOption?.label,
-    selectorOptions: firstOption?.values,
   };
 }
 
@@ -89,7 +86,7 @@ export default function TextilesPageClient({ page, products }: TextilesPageClien
           </Link>
         </TextilesPageIntro>
 
-        <section className="section-primary pt-2 sm:pt-4" data-reveal>
+        <section className="section-primary pt-2 sm:pt-4" data-reveal suppressHydrationWarning>
           <div className="page-container max-w-[1200px]">
             <p className="max-w-[58ch] text-[14px] leading-[1.9] text-[#5f574d]">
               These textiles are arranged by form and use, with scarves for drape and daily wear and pocket squares for detail and gifting, alongside colour stories that sit naturally beside Seijaku fragrances.
@@ -129,7 +126,7 @@ export default function TextilesPageClient({ page, products }: TextilesPageClien
           </div>
         </section>
 
-        <section className="section-editorial pt-6 sm:pt-8">
+        <section className="section-editorial pt-6 sm:pt-8" data-reveal suppressHydrationWarning>
           <div className="page-container max-w-[980px]">
             <div className="rounded-[30px] border border-[rgba(86,76,64,0.08)] bg-[linear-gradient(180deg,rgba(250,247,241,0.92)_0%,rgba(244,239,231,0.96)_100%)] px-7 py-9 sm:px-10 sm:py-11">
               <p className="text-[10px] uppercase tracking-[0.32em] text-[#8a745e]">Editorial Note</p>

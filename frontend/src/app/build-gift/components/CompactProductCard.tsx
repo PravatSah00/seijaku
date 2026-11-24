@@ -1,7 +1,7 @@
 "use client";
 
 import Image from "next/image";
-import { Heart } from "lucide-react";
+import { Heart, Loader2 } from "lucide-react";
 
 import { hasVariantSelector, type ProductView } from "@/src/lib/product-types";
 import { useShopState } from "@/src/components/shop/ShopStateProvider";
@@ -11,6 +11,9 @@ type CompactProductCardProps = {
     item: ProductView;
     selectedCountForProduct: number;
     canAddMore: boolean;
+    categoryLimitReached?: boolean;
+    categoryRequiredCount?: number;
+    isLoadingDetails?: boolean;
     onAddGiftProduct: (item: ProductView, selection?: ProductSelectionPayload) => void;
     onRemoveGiftProduct: (item: ProductView) => void;
     onViewDetails: (slug: string) => void;
@@ -20,6 +23,9 @@ export default function CompactProductCard({
     item,
     selectedCountForProduct,
     canAddMore,
+    categoryLimitReached = false,
+    categoryRequiredCount = 1,
+    isLoadingDetails = false,
     onAddGiftProduct,
     onRemoveGiftProduct,
     onViewDetails,
@@ -60,6 +66,7 @@ export default function CompactProductCard({
 
             <button
                 type="button"
+                disabled={isLoadingDetails}
                 onClick={() => onViewDetails(item.slug)}
                 className="block w-full text-left focus-visible:outline-none"
             >
@@ -72,6 +79,18 @@ export default function CompactProductCard({
                         className="object-cover transition-transform duration-500 group-hover:scale-[1.015]"
                     />
                     <div className="pointer-events-none absolute inset-0 bg-[linear-gradient(180deg,rgba(28,24,20,0)_58%,rgba(28,24,20,0.08)_100%)]" />
+
+                    {/* Modern product details loading overlay */}
+                    {isLoadingDetails && (
+                        <div className="absolute inset-0 z-20 flex flex-col items-center justify-center bg-[#FAF5EC]/85 backdrop-blur-[2px] transition-all animate-in fade-in">
+                            <div className="flex h-10 w-10 items-center justify-center rounded-full bg-[#2B3B2F] text-[#FAF5EC] shadow-md">
+                                <Loader2 className="h-5 w-5 animate-spin text-[#C2A26F]" />
+                            </div>
+                            <span className="mt-2 rounded-full bg-[#2B3B2F]/10 px-2.5 py-0.5 font-serif text-[11px] font-medium tracking-wide text-[#2B3B2F]">
+                                Opening details...
+                            </span>
+                        </div>
+                    )}
                 </div>
             </button>
 
@@ -80,9 +99,14 @@ export default function CompactProductCard({
                     {item.type}
                 </p>
 
-                <h2 className="mt-2 font-serif text-[18px] leading-[1.12] tracking-[-0.022em] text-[#1f1a16]">
+                <button
+                    type="button"
+                    disabled={isLoadingDetails}
+                    onClick={() => onViewDetails(item.slug)}
+                    className="mt-2 block text-left font-serif text-[18px] leading-[1.12] tracking-[-0.022em] text-[#1f1a16] hover:text-[#4A6350] transition-colors focus-visible:outline-none"
+                >
                     {item.title}
-                </h2>
+                </button>
 
                 {/* <p className="mt-2 line-clamp-2 min-h-[2.9rem] text-[13px] leading-[1.68] text-[#625a51]">
                     {item.shortDescription || "Quietly composed Seijaku object."}
@@ -110,7 +134,7 @@ export default function CompactProductCard({
                                         disabled={!canAddMore}
                                         onClick={() => onViewDetails(item.slug)}
                                         className="rounded-lg border border-[#4A6350] px-2.5 py-1 text-[10px] font-medium uppercase tracking-wider text-[#2B3B2F] transition-colors hover:bg-[#4A6350] hover:text-[#F6EEE4] disabled:cursor-not-allowed disabled:opacity-40"
-                                        title={canAddMore ? "Add another with options" : "Gift box is full"}
+                                        title={canAddMore ? "Add another with options" : categoryLimitReached ? `Category requirement reached (${categoryRequiredCount} max)` : "Gift box is full"}
                                     >
                                         + Options
                                     </button>
@@ -130,8 +154,15 @@ export default function CompactProductCard({
                                 disabled={!canAddMore}
                                 onClick={() => onViewDetails(item.slug)}
                                 className="flex w-full items-center justify-between gap-2 rounded-lg border border-[#d8cdc0] bg-[#e8ded0]/60 px-3 py-2 text-[11px] font-medium uppercase tracking-[0.14em] text-[#4c4238] transition-all hover:bg-[#e8ded0] disabled:cursor-not-allowed disabled:opacity-40"
+                                title={!canAddMore && categoryLimitReached ? `Category requirement of ${categoryRequiredCount} fulfilled` : undefined}
                             >
-                                <span>{canAddMore ? "Select Options" : "Gift Box Full"}</span>
+                                <span>
+                                    {canAddMore
+                                        ? "Select Options"
+                                        : categoryLimitReached
+                                            ? `${categoryRequiredCount}/${categoryRequiredCount} Selected`
+                                            : "Gift Box Full"}
+                                </span>
                                 <span aria-hidden>→</span>
                             </button>
                         )
@@ -154,7 +185,7 @@ export default function CompactProductCard({
                                     disabled={!canAddMore}
                                     onClick={() => onAddGiftProduct(item)}
                                     className="flex h-7 w-7 items-center justify-center rounded-md border border-[#4A6350] bg-[#4A6350] text-[13px] font-bold text-[#F6EEE4] transition-colors hover:bg-[#3D5242] disabled:cursor-not-allowed disabled:opacity-40"
-                                    title={canAddMore ? "Add another" : "Gift box is full"}
+                                    title={canAddMore ? "Add another" : categoryLimitReached ? `Category requirement reached (${categoryRequiredCount} max)` : "Gift box is full"}
                                 >
                                     +
                                 </button>
@@ -166,9 +197,14 @@ export default function CompactProductCard({
                             disabled={!canAddMore}
                             onClick={() => onAddGiftProduct(item)}
                             className="flex w-full items-center justify-center gap-2 rounded-lg bg-[#EFE5D8] px-3 py-2 text-[11px] font-medium uppercase tracking-[0.14em] text-[#2B3B2F] transition-all hover:bg-[#E2D4C3] disabled:cursor-not-allowed disabled:opacity-40"
+                            title={!canAddMore && categoryLimitReached ? `Category requirement of ${categoryRequiredCount} fulfilled` : undefined}
                         >
                             <span>
-                                {canAddMore ? "+ Add to Gift Box" : "Gift Box Full"}
+                                {canAddMore
+                                    ? "+ Add to Gift Box"
+                                    : categoryLimitReached
+                                        ? `${categoryRequiredCount}/${categoryRequiredCount} Selected`
+                                        : "Gift Box Full"}
                             </span>
                         </button>
                     )}

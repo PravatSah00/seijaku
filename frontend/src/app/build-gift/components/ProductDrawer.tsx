@@ -3,6 +3,7 @@
 import { PanelLeftOpen, SlidersHorizontal } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
+import { triggerPageLoader, stopPageLoader } from "@/src/components/PageTransitionLoader";
 
 import {
     getShopPrices,
@@ -57,6 +58,15 @@ function sortProducts(items: ProductView[], sortBy: ShopSortOption) {
         return sorted.sort((a, b) => b.price - a.price);
     }
 
+    if (sortBy === "Recommended") {
+        return sorted.sort((a, b) => {
+            const orderA = typeof a.buildGift?.order === "number" ? a.buildGift.order : 9999;
+            const orderB = typeof b.buildGift?.order === "number" ? b.buildGift.order : 9999;
+            if (orderA !== orderB) return orderA - orderB;
+            return a.title.localeCompare(b.title);
+        });
+    }
+
     return sorted;
 }
 
@@ -64,6 +74,12 @@ type ProductDrawerProps = {
     products: ProductView[];
     selectedCountsByProductId: Record<string, number>;
     canAddMore: boolean;
+    categoryLimitReached?: boolean;
+    categoryRequiredCount?: number;
+    categoryCurrentCount?: number;
+    categoryLabel?: string;
+    hasNextStep?: boolean;
+    onNextStep?: () => void;
     onAddProduct: (product: ProductView, selection?: ProductSelectionPayload) => void;
     onRemoveProduct: (product: ProductView) => void;
 };
@@ -72,6 +88,12 @@ export default function ProductDrawer({
     products,
     selectedCountsByProductId,
     canAddMore,
+    categoryLimitReached = false,
+    categoryRequiredCount = 1,
+    categoryCurrentCount = 0,
+    categoryLabel,
+    hasNextStep = false,
+    onNextStep,
     onAddProduct,
     onRemoveProduct,
 }: ProductDrawerProps) {
@@ -88,11 +110,19 @@ export default function ProductDrawer({
     const [visibleCount, setVisibleCount] = useState(INITIAL_BATCH_SIZE);
     const [isRailCollapsed, setIsRailCollapsed] = useState(true);
     const [isFilterDrawerOpen, setIsFilterDrawerOpen] = useState(false);
+    const [loadingProductSlug, setLoadingProductSlug] = useState<string | null>(null);
 
     const detailSlug = searchParams.get("item");
     const detailProduct = detailSlug
         ? products.find((product) => product.slug === detailSlug) ?? null
         : null;
+
+    useEffect(() => {
+        if (detailProduct && loadingProductSlug) {
+            setLoadingProductSlug(null);
+            stopPageLoader();
+        }
+    }, [detailProduct, loadingProductSlug]);
 
     useEffect(() => {
         // Ensure filter rail is always hidden by default on page load / refresh
@@ -179,6 +209,23 @@ export default function ProductDrawer({
         router.replace(query ? `${pathname}?${query}` : pathname, {
             scroll: false,
         });
+    }
+
+    function handleViewDetails(slug: string) {
+        setLoadingProductSlug(slug);
+        triggerPageLoader();
+        updateQuery(slug);
+
+        // Safety fallback timeout
+        setTimeout(() => {
+            setLoadingProductSlug((current) => {
+                if (current === slug) {
+                    stopPageLoader();
+                    return null;
+                }
+                return current;
+            });
+        }, 3000);
     }
 
     const filterRailProps = {
@@ -284,6 +331,29 @@ export default function ProductDrawer({
                                     />
                                 </div>
 
+                                {categoryLimitReached && (
+                                    <div className="mt-6 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 rounded-xl border border-[#4A6350]/30 bg-[#4A6350]/10 px-4 py-3 font-sans text-[12px] text-[#2B3B2F] shadow-xs">
+                                        <div className="flex items-center gap-2.5">
+                                            <span className="flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-[#4A6350] text-[#F6EEE4] text-[11px] font-bold">
+                                                ✓
+                                            </span>
+                                            <span>
+                                                <strong>{categoryRequiredCount} of {categoryRequiredCount} {categoryLabel || "items"} selected.</strong>{" "}
+                                                Category limit reached. To choose a different product, remove the selected item below.
+                                            </span>
+                                        </div>
+                                        {hasNextStep && onNextStep && (
+                                            <button
+                                                type="button"
+                                                onClick={onNextStep}
+                                                className="shrink-0 self-start sm:self-auto rounded-lg bg-[#2B3B2F] px-3.5 py-1.5 text-[11px] font-medium uppercase tracking-wider text-[#F6EEE4] transition-colors hover:bg-[#1E2B22] shadow-xs"
+                                            >
+                                                Next Step →
+                                            </button>
+                                        )}
+                                    </div>
+                                )}
+
                                 {visibleProducts.length === 0 ? (
                                     <div className="mt-8 rounded-[28px] border border-[rgba(111,100,86,0.11)] bg-[linear-gradient(180deg,#fbf8f2_0%,#f7f1e8_100%)] px-7 py-10 text-center sm:px-10 sm:py-12">
                                         <p className="font-serif text-[30px] leading-[1.14] tracking-[-0.02em] text-[#1f1a16]">
@@ -309,6 +379,9 @@ export default function ProductDrawer({
                                                             countForProduct
                                                         }
                                                         canAddMore={canAddMore}
+                                                        categoryLimitReached={categoryLimitReached}
+                                                        categoryRequiredCount={categoryRequiredCount}
+                                                        isLoadingDetails={loadingProductSlug === product.slug}
                                                         onAddGiftProduct={
                                                             onAddProduct
                                                         }
@@ -316,7 +389,7 @@ export default function ProductDrawer({
                                                             onRemoveProduct
                                                         }
                                                         onViewDetails={
-                                                            updateQuery
+                                                            handleViewDetails
                                                         }
                                                     />
                                                 );
@@ -357,13 +430,19 @@ export default function ProductDrawer({
             <ProductDetailDrawer
                 item={detailProduct}
                 isOpen={Boolean(detailProduct)}
-                onClose={() => updateQuery()}
+                onClose={() => {
+                    setLoadingProductSlug(null);
+                    stopPageLoader();
+                    updateQuery();
+                }}
                 selectedCountForProduct={
                     detailProduct
                         ? (selectedCountsByProductId[detailProduct.id] ?? 0)
                         : 0
                 }
                 canAddMore={canAddMore}
+                categoryLimitReached={categoryLimitReached}
+                categoryRequiredCount={categoryRequiredCount}
                 onAddGiftProduct={onAddProduct}
                 onRemoveGiftProduct={onRemoveProduct}
             />

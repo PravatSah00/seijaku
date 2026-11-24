@@ -51,24 +51,24 @@ export default function ShopProductActions({
 
   return (
     <>
-      <div className={`flex flex-wrap items-center gap-x-3 gap-y-2.5 ${className}`.trim()}>
+      <div className={`flex items-center gap-2 sm:gap-2.5 w-full ${className}`.trim()}>
         {notifyMe ? (
           <button
             type="button"
             onClick={() => setIsNotifyOpen(true)}
-            className="inline-flex min-h-[40px] items-center justify-center rounded-full bg-[#294536] px-5 py-2 text-[10px] font-medium uppercase tracking-[0.22em] text-[#f4efe8] transition-colors duration-200 hover:bg-[#21382c] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#8c7b68]"
+            className="flex-1 inline-flex min-h-[40px] items-center justify-center rounded-full bg-[#294536] px-4 py-2 text-[10px] font-medium uppercase tracking-[0.18em] text-[#f4efe8] transition-colors duration-200 hover:bg-[#21382c] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#8c7b68] whitespace-nowrap"
           >
             Notify Me
           </button>
         ) : unbuyable ? (
-          <span className="inline-flex min-h-[40px] items-center justify-center rounded-full border border-[rgba(111,100,86,0.18)] bg-[rgba(255,255,255,0.6)] px-4 py-2 text-[10px] font-medium uppercase tracking-[0.22em] text-[#7a7064]">
+          <span className="flex-1 inline-flex min-h-[40px] items-center justify-center rounded-full border border-[rgba(111,100,86,0.18)] bg-[rgba(255,255,255,0.6)] px-3 py-2 text-[10px] font-medium uppercase tracking-[0.18em] text-[#7a7064] whitespace-nowrap">
             {item.status}
           </span>
         ) : (
           <button
             type="button"
             onClick={handleNavigateToDetails}
-            className="inline-flex min-h-[40px] items-center justify-center gap-1.5 rounded-full bg-[#294536] px-5 py-2 text-[10px] font-medium uppercase tracking-[0.22em] text-[#f4efe8] transition-colors duration-200 hover:bg-[#1f3529] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#8c7b68]"
+            className="flex-1 inline-flex min-h-[40px] items-center justify-center gap-1.5 rounded-full bg-[#294536] px-4 py-2 text-[10px] font-medium uppercase tracking-[0.18em] text-[#f4efe8] transition-colors duration-200 hover:bg-[#1f3529] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#8c7b68] whitespace-nowrap"
           >
             <span>View Details</span>
             <span aria-hidden>→</span>
@@ -79,7 +79,7 @@ export default function ShopProductActions({
           type="button"
           onClick={() => toggleCollection(item.slug)}
           aria-label={collected ? `Remove ${item.title} from wishlist` : `Add ${item.title} to wishlist`}
-          className={`inline-flex min-h-[40px] items-center gap-1.5 rounded-full border px-3.5 py-2 text-[10px] uppercase tracking-[0.18em] transition-all duration-200 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#8c7b68] ${
+          className={`shrink-0 inline-flex min-h-[40px] items-center justify-center gap-1.5 rounded-full border px-3 sm:px-3.5 py-2 text-[10px] uppercase tracking-[0.16em] transition-all duration-200 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#8c7b68] whitespace-nowrap ${
             collected
               ? "border-[#2e4a36]/40 bg-[#2e4a36]/10 font-medium text-[#2e4a36]"
               : "border-[rgba(111,100,86,0.18)] bg-white/70 text-[#5d5449] hover:bg-white hover:text-[#1d1a17]"
