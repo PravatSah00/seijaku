@@ -202,8 +202,9 @@ export function normalizeBackendProduct(b: BackendProduct): ProductView | null {
       if (!b.options || b.options.length === 0) return undefined;
       const opts = b.options
         .map((o) => {
-          const inStockValues = (o.values ?? []).filter(
-            (v) => (v.stock === undefined || v.stock === null || v.stock > 0) && (v.isActive ?? true)
+          const inStockValues = (o.values ?? [])
+          .filter(
+            (v) => (v.stock === undefined || v.stock === null || v.stock >= 0) && (v.isActive ?? true)
           );
           return {
             label: o.label,

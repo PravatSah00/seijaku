@@ -64,6 +64,63 @@ function isValidEmail(val: string): boolean {
   );
 }
 
+/**
+ * Read stock information already provided by your product data.
+ * Missing inventory metadata is treated as unknown (not automatically sold out).
+ * Do not guess stock availability from a price or an option's display label.
+ */
+function isInventoryUnavailable(value: unknown): boolean {
+  if (typeof value !== "object" || value === null) return false;
+  const data = value as Record<string, unknown>;
+
+  // Prefer an explicit sellability decision (supports backorders).
+  if (typeof data.availableForSale === "boolean") return !data.availableForSale;
+
+  // Common boolean stock flags.
+  const availableFlags = ["available", "isAvailable", "inStock", "isInStock"];
+  if (availableFlags.some((field) => data[field] === false)) return true;
+
+  const unavailableFlags = ["outOfStock", "isOutOfStock", "soldOut", "isSoldOut"];
+  if (unavailableFlags.some((field) => data[field] === true)) return true;
+
+  const quantityFields = [
+    "inventoryQuantity", "quantityAvailable", "availableQuantity",
+    "stockQuantity", "stock", "stockLevel",
+  ];
+  if (quantityFields.some((field) =>
+    typeof data[field] === "number" && (data[field] as number) <= 0
+  )) return true;
+
+  const status = String(data.status ?? data.inventoryStatus ?? "")
+    .trim()
+    .toLowerCase()
+    .replace(/[\s_-]+/g, " ");
+  return ["out of stock", "sold out", "unavailable"].includes(status);
+}
+
+type ProductOption = NonNullable<ProductView["customizationOptions"]>[number];
+
+/** Checks stock for one choice, not stock for the whole product. */
+function isOptionValueUnavailable(option: ProductOption, value: string): boolean {
+  const pricedValue = option.valuesWithPricing?.find((entry) => entry.label === value);
+  if (isInventoryUnavailable(pricedValue)) return true;
+
+  // Optional support for apps that keep stock separately from variant pricing.
+  const optionRecord = option as unknown as Record<string, unknown>;
+  for (const field of ["valuesWithStock", "valuesWithAvailability", "valuesWithInventory"]) {
+    const entries = optionRecord[field];
+    if (!Array.isArray(entries)) continue;
+    const match = entries.find((entry: unknown) => {
+      if (typeof entry !== "object" || entry === null) return false;
+      const row = entry as Record<string, unknown>;
+      return row.label === value || row.value === value;
+    });
+    if (isInventoryUnavailable(match)) return true;
+  }
+
+  return false;
+}
+
 export default function CheckoutPageClient() {
   const router = useRouter();
   const searchParams = useSearchParams();
@@ -219,12 +276,31 @@ export default function CheckoutPageClient() {
     };
   }, [activeSlug]);
 
+  // Remove previously selected choices that the latest product data marks unavailable.
+  useEffect(() => {
+    if (!singleItem) return;
+    setSelectedOptionsState((prev) => {
+      const next = { ...prev };
+      let changed = false;
+      for (const opt of singleItem.customizationOptions ?? []) {
+        const value = next[opt.label];
+        if (value && (!opt.values.includes(value) || isOptionValueUnavailable(opt, value))) {
+          delete next[opt.label];
+          changed = true;
+        }
+      }
+      return changed ? next : prev;
+    });
+  }, [singleItem, checkoutSelectedOptions]);
+
   const activeVariantLabel = useMemo(() => {
     if (Object.keys(selectedOptionsState).length > 0) {
       return Object.values(selectedOptionsState).filter(Boolean).join(" · ");
     }
+    // Do not show an old variant label after an unavailable selection is cleared.
+    if (singleItem?.customizationOptions?.length) return null;
     return checkoutVariantLabel;
-  }, [selectedOptionsState, checkoutVariantLabel]);
+  }, [selectedOptionsState, checkoutVariantLabel, singleItem]);
 
   // Determine line items for checkout (gift bundle, single item, or full cart)
   const lineItems = useMemo<CheckoutLineItem[]>(() => {
@@ -532,26 +608,33 @@ export default function CheckoutPageClient() {
                                   </div>
                                   <div className="flex flex-wrap gap-1.5">
                                     {opt.values.map((val) => {
-                                      const isSelected = selectedOptionsState[opt.label] === val;
+                                      const isOutOfStock = isInventoryUnavailable(singleItem) || isOptionValueUnavailable(opt, val);
+                                      const isSelected = !isOutOfStock && selectedOptionsState[opt.label] === val;
                                       const pricingInfo = opt.valuesWithPricing?.find((vp) => vp.label === val);
                                       const delta = pricingInfo?.priceDelta ?? 0;
                                       return (
                                         <button
                                           key={val}
                                           type="button"
-                                          onClick={() =>
+                                          disabled={isOutOfStock}
+                                          onClick={() => {
+                                            if (isOutOfStock) return;
                                             setSelectedOptionsState((prev) => ({
                                               ...prev,
                                               [opt.label]: val,
-                                            }))
-                                          }
-                                          className={`rounded-full px-3 py-1 text-[11px] font-medium transition-all ${
-                                            isSelected
-                                              ? "bg-[#2e4a36] text-[#faf7f1] shadow-sm ring-1 ring-[#2e4a36]/20"
-                                              : "border border-[#d8cec1] bg-white text-[#4a4238] hover:border-[#2e4a36]"
-                                          }`}
+                                            }));
+                                          }}
+                                          className={`rounded-full px-3 py-1 text-[11px] font-medium transition-all ${isOutOfStock
+                                              ? "cursor-not-allowed border border-[#d8cec1] bg-[#ece5d9] text-[#8d7d6d] opacity-60"
+                                              : isSelected
+                                                ? "bg-[#2e4a36] text-[#faf7f1] shadow-sm ring-1 ring-[#2e4a36]/20"
+                                                : "border border-[#d8cec1] bg-white text-[#4a4238] hover:border-[#2e4a36]"
+                                            }`}
                                         >
-                                          <span>{val}</span>
+                                          <span className={isOutOfStock ? "line-through" : undefined}>{val}</span>
+                                          {isOutOfStock && (
+                                            <span className="ml-1 text-[10px]">(Out of stock)</span>
+                                          )}
                                           {delta !== 0 && (
                                             <span className="ml-1 text-[10px] opacity-80">
                                               ({delta > 0 ? `+₹${delta}` : `-₹${Math.abs(delta)}`})
@@ -648,11 +731,10 @@ export default function CheckoutPageClient() {
                         setFieldErrors((prev) => ({ ...prev, name: "Full name must be at least 2 characters." }));
                       }
                     }}
-                    className={`w-full rounded-[18px] border px-4 py-3 text-[14px] text-[#2f2924] outline-none transition-colors ${
-                      fieldErrors.name
+                    className={`w-full rounded-[18px] border px-4 py-3 text-[14px] text-[#2f2924] outline-none transition-colors ${fieldErrors.name
                         ? "border-[#c53929] bg-[#fff8f6] focus:border-[#c53929] focus:ring-2 focus:ring-[#c53929]/15"
                         : "border-[#cfc3b4] bg-[#faf7f1] focus:border-[#2e4a36] focus:ring-2 focus:ring-[#2e4a36]/15"
-                    }`}
+                      }`}
                   />
                   {fieldErrors.name && (
                     <p className="mt-1 px-1 text-[11px] font-medium text-[#c53929]">
@@ -678,11 +760,10 @@ export default function CheckoutPageClient() {
                         setFieldErrors((prev) => ({ ...prev, email: "Please enter a valid email address (e.g. name@example.com)." }));
                       }
                     }}
-                    className={`w-full rounded-[18px] border px-4 py-3 text-[14px] text-[#2f2924] outline-none transition-colors ${
-                      fieldErrors.email
+                    className={`w-full rounded-[18px] border px-4 py-3 text-[14px] text-[#2f2924] outline-none transition-colors ${fieldErrors.email
                         ? "border-[#c53929] bg-[#fff8f6] focus:border-[#c53929] focus:ring-2 focus:ring-[#c53929]/15"
                         : "border-[#cfc3b4] bg-[#faf7f1] focus:border-[#2e4a36] focus:ring-2 focus:ring-[#2e4a36]/15"
-                    }`}
+                      }`}
                   />
                   {fieldErrors.email && (
                     <p className="mt-1 px-1 text-[11px] font-medium text-[#c53929]">
@@ -709,11 +790,10 @@ export default function CheckoutPageClient() {
                         setFieldErrors((prev) => ({ ...prev, phone: "Please enter a valid 10-digit phone number." }));
                       }
                     }}
-                    className={`w-full rounded-[18px] border px-4 py-3 text-[14px] text-[#2f2924] outline-none transition-colors ${
-                      fieldErrors.phone
+                    className={`w-full rounded-[18px] border px-4 py-3 text-[14px] text-[#2f2924] outline-none transition-colors ${fieldErrors.phone
                         ? "border-[#c53929] bg-[#fff8f6] focus:border-[#c53929] focus:ring-2 focus:ring-[#c53929]/15"
                         : "border-[#cfc3b4] bg-[#faf7f1] focus:border-[#2e4a36] focus:ring-2 focus:ring-[#2e4a36]/15"
-                    }`}
+                      }`}
                   />
                   {fieldErrors.phone && (
                     <p className="mt-1 px-1 text-[11px] font-medium text-[#c53929]">
@@ -738,11 +818,10 @@ export default function CheckoutPageClient() {
                         setFieldErrors((prev) => ({ ...prev, shippingLine1: "Please enter your delivery address." }));
                       }
                     }}
-                    className={`w-full rounded-[18px] border px-4 py-3 text-[14px] text-[#2f2924] outline-none transition-colors ${
-                      fieldErrors.shippingLine1
+                    className={`w-full rounded-[18px] border px-4 py-3 text-[14px] text-[#2f2924] outline-none transition-colors ${fieldErrors.shippingLine1
                         ? "border-[#c53929] bg-[#fff8f6] focus:border-[#c53929] focus:ring-2 focus:ring-[#c53929]/15"
                         : "border-[#cfc3b4] bg-[#faf7f1] focus:border-[#2e4a36] focus:ring-2 focus:ring-[#2e4a36]/15"
-                    }`}
+                      }`}
                   />
                   {fieldErrors.shippingLine1 && (
                     <p className="mt-1 px-1 text-[11px] font-medium text-[#c53929]">
@@ -776,11 +855,10 @@ export default function CheckoutPageClient() {
                           setFieldErrors((prev) => ({ ...prev, shippingCity: "Please enter your city." }));
                         }
                       }}
-                      className={`w-full rounded-[18px] border px-4 py-3 text-[14px] text-[#2f2924] outline-none transition-colors ${
-                        fieldErrors.shippingCity
+                      className={`w-full rounded-[18px] border px-4 py-3 text-[14px] text-[#2f2924] outline-none transition-colors ${fieldErrors.shippingCity
                           ? "border-[#c53929] bg-[#fff8f6] focus:border-[#c53929] focus:ring-2 focus:ring-[#c53929]/15"
                           : "border-[#cfc3b4] bg-[#faf7f1] focus:border-[#2e4a36] focus:ring-2 focus:ring-[#2e4a36]/15"
-                      }`}
+                        }`}
                     />
                     {fieldErrors.shippingCity && (
                       <p className="mt-1 px-1 text-[11px] font-medium text-[#c53929]">
@@ -803,11 +881,10 @@ export default function CheckoutPageClient() {
                           setFieldErrors((prev) => ({ ...prev, shippingState: "Please enter your state." }));
                         }
                       }}
-                      className={`w-full rounded-[18px] border px-4 py-3 text-[14px] text-[#2f2924] outline-none transition-colors ${
-                        fieldErrors.shippingState
+                      className={`w-full rounded-[18px] border px-4 py-3 text-[14px] text-[#2f2924] outline-none transition-colors ${fieldErrors.shippingState
                           ? "border-[#c53929] bg-[#fff8f6] focus:border-[#c53929] focus:ring-2 focus:ring-[#c53929]/15"
                           : "border-[#cfc3b4] bg-[#faf7f1] focus:border-[#2e4a36] focus:ring-2 focus:ring-[#2e4a36]/15"
-                      }`}
+                        }`}
                     />
                     {fieldErrors.shippingState && (
                       <p className="mt-1 px-1 text-[11px] font-medium text-[#c53929]">
@@ -837,11 +914,10 @@ export default function CheckoutPageClient() {
                           setFieldErrors((prev) => ({ ...prev, shippingPincode: "Pincode must be exactly 6 digits." }));
                         }
                       }}
-                      className={`w-full rounded-[18px] border px-4 py-3 text-[14px] text-[#2f2924] outline-none transition-colors ${
-                        fieldErrors.shippingPincode
+                      className={`w-full rounded-[18px] border px-4 py-3 text-[14px] text-[#2f2924] outline-none transition-colors ${fieldErrors.shippingPincode
                           ? "border-[#c53929] bg-[#fff8f6] focus:border-[#c53929] focus:ring-2 focus:ring-[#c53929]/15"
                           : "border-[#cfc3b4] bg-[#faf7f1] focus:border-[#2e4a36] focus:ring-2 focus:ring-[#2e4a36]/15"
-                      }`}
+                        }`}
                     />
                     {fieldErrors.shippingPincode && (
                       <p className="mt-1 px-1 text-[11px] font-medium text-[#c53929]">
@@ -904,6 +980,12 @@ export default function CheckoutPageClient() {
                       return;
                     }
 
+                    // Do not allow payment for a known unavailable product or option.
+                    if (singleItem && isInventoryUnavailable(singleItem)) {
+                      setError("This product is currently out of stock.");
+                      return;
+                    }
+
                     if (singleItem?.customizationOptions && singleItem.customizationOptions.length > 0) {
                       const unselectedOption = singleItem.customizationOptions.find(
                         (opt) => !selectedOptionsState[opt.label]
@@ -912,25 +994,34 @@ export default function CheckoutPageClient() {
                         setError(`Please select an option for "${unselectedOption.label}" above before proceeding.`);
                         return;
                       }
+
+                      const unavailableOption = singleItem.customizationOptions.find((opt) => {
+                        const value = selectedOptionsState[opt.label];
+                        return !opt.values.includes(value) || isOptionValueUnavailable(opt, value);
+                      });
+                      if (unavailableOption) {
+                        setError(`Your selected "${unavailableOption.label}" is unavailable. Please choose another option.`);
+                        return;
+                      }
                     }
 
                     const formattedNotes = isGiftMode
                       ? [
-                          `[Seijaku Curated Gift Box - ${lineItems.length} Products in Festive Packaging]`,
-                          giftNote.trim() ? `Recipient Gift Message: "${giftNote.trim()}"` : `Recipient Gift Message: None requested`,
-                          notes.trim() ? `Delivery Instructions: ${notes.trim()}` : "",
-                        ]
-                          .filter(Boolean)
-                          .join("\n")
+                        `[Seijaku Curated Gift Box - ${lineItems.length} Products in Festive Packaging]`,
+                        giftNote.trim() ? `Recipient Gift Message: "${giftNote.trim()}"` : `Recipient Gift Message: None requested`,
+                        notes.trim() ? `Delivery Instructions: ${notes.trim()}` : "",
+                      ]
+                        .filter(Boolean)
+                        .join("\n")
                       : notes.trim() || undefined;
 
                     const orderItemsPayload = lineItems.map((item) => {
                       const selectedOptions = isGiftMode
                         ? {
-                            ...(item.selectedOptions ?? {}),
-                            "Gift Packaging": "Festive Gift Box",
-                            ...(item.categoryName ? { "Gift Category": item.categoryName } : {}),
-                          }
+                          ...(item.selectedOptions ?? {}),
+                          "Gift Packaging": "Festive Gift Box",
+                          ...(item.categoryName ? { "Gift Category": item.categoryName } : {}),
+                        }
                         : item.selectedOptions ?? undefined;
 
                       const variantSummary = isGiftMode

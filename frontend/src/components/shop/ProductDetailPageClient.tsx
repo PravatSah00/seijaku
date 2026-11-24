@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import Image from "next/image";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
@@ -36,10 +36,68 @@ function formatPrice(amount: number) {
   return `₹${amount.toLocaleString("en-IN")}`;
 }
 
+/**
+ * Read stock information already provided by your product data.
+ * Missing inventory metadata is treated as unknown (not automatically sold out).
+ * Do not guess stock availability from a price or an option's display label.
+ */
+function isInventoryUnavailable(value: unknown): boolean {
+  if (typeof value !== "object" || value === null) return false;
+  const data = value as Record<string, unknown>;
+
+  // Prefer an explicit sellability decision (supports backorders).
+  if (typeof data.availableForSale === "boolean") return !data.availableForSale;
+
+  // Common boolean stock flags.
+  const availableFlags = ["available", "isAvailable", "inStock", "isInStock"];
+  if (availableFlags.some((field) => data[field] === false)) return true;
+
+  const unavailableFlags = ["outOfStock", "isOutOfStock", "soldOut", "isSoldOut"];
+  if (unavailableFlags.some((field) => data[field] === true)) return true;
+
+  const quantityFields = [
+    "inventoryQuantity", "quantityAvailable", "availableQuantity",
+    "stockQuantity", "stock", "stockLevel",
+  ];
+  if (quantityFields.some((field) =>
+    typeof data[field] === "number" && (data[field] as number) <= 0
+  )) return true;
+
+  const status = String(data.status ?? data.inventoryStatus ?? "")
+    .trim()
+    .toLowerCase()
+    .replace(/[\s_-]+/g, " ");
+  return ["out of stock", "sold out", "unavailable"].includes(status);
+}
+
+type ProductOption = NonNullable<ProductView["customizationOptions"]>[number];
+
+/** Checks stock for one choice, not stock for the whole product. */
+function isOptionValueUnavailable(option: ProductOption, value: string): boolean {
+  const pricedValue = option.valuesWithPricing?.find((entry) => entry.label === value);
+  if (isInventoryUnavailable(pricedValue)) return true;
+
+  // Optional support for apps that keep stock separately from variant pricing.
+  const optionRecord = option as unknown as Record<string, unknown>;
+  for (const field of ["valuesWithStock", "valuesWithAvailability", "valuesWithInventory"]) {
+    const entries = optionRecord[field];
+    if (!Array.isArray(entries)) continue;
+    const match = entries.find((entry: unknown) => {
+      if (typeof entry !== "object" || entry === null) return false;
+      const row = entry as Record<string, unknown>;
+      return row.label === value || row.value === value;
+    });
+    if (isInventoryUnavailable(match)) return true;
+  }
+
+  return false;
+}
+
 export default function ProductDetailPageClient({
   product,
   relatedProducts = [],
 }: ProductDetailPageClientProps) {
+  
   const router = useRouter();
   const { addToCart, beginCheckout, isCollected, toggleCollection } = useShopState();
   const collected = isCollected(product.slug);
@@ -60,14 +118,49 @@ export default function ProductDetailPageClient({
   const [activeTab, setActiveTab] = useState<"story" | "specs" | "shipping">("story");
   const [copiedLink, setCopiedLink] = useState(false);
 
-  const customizationOptions = product.customizationOptions ?? [];
+  const customizationOptions = useMemo(
+    () => product.customizationOptions ?? [],
+    [product.customizationOptions]
+  );
   const hasVariants = hasVariantSelector(product);
+  const productUnavailable = isInventoryUnavailable(product);
 
-  // Check if all required options are selected
+  // If the incoming product's stock changes, forget any now-unavailable choices.
+  useEffect(() => {
+    setSelectedOptions((previous) => {
+      let changed = false;
+      const next = { ...previous };
+      for (const [label, value] of Object.entries(next)) {
+        const option = customizationOptions.find((item) => item.label === label);
+        if (
+          productUnavailable ||
+          !option ||
+          !option.values.includes(value) ||
+          isOptionValueUnavailable(option, value)
+        ) {
+          delete next[label];
+          changed = true;
+        }
+      }
+      return changed ? next : previous;
+    });
+  }, [customizationOptions, productUnavailable]);
+
+  // Required options must exist AND be in stock; stale selections cannot be bought.
   const allRequiredSelected = useMemo(() => {
+    if (productUnavailable) return false;
+
+    const anyInvalidSelection = customizationOptions.some((option) => {
+      const chosen = selectedOptions[option.label];
+      return Boolean(chosen) && (
+        !option.values.includes(chosen) || isOptionValueUnavailable(option, chosen)
+      );
+    });
+    if (anyInvalidSelection) return false;
+
     if (!hasVariants || customizationOptions.length === 0) return true;
-    return customizationOptions.every((opt) => Boolean(selectedOptions[opt.label]));
-  }, [hasVariants, customizationOptions, selectedOptions]);
+    return customizationOptions.every((option) => Boolean(selectedOptions[option.label]));
+  }, [hasVariants, customizationOptions, selectedOptions, productUnavailable]);
 
   // Variant label for cart / order line items
   const activeVariantLabel = useMemo(() => {
@@ -97,10 +190,20 @@ export default function ProductDetailPageClient({
   }, [product.price, customizationOptions, selectedOptions]);
 
   const handleSelectOption = (optionLabel: string, value: string) => {
+    const option = customizationOptions.find((item) => item.label === optionLabel);
+    // Handler-level guard: even a programmatic call cannot select sold-out stock.
+    if (
+      productUnavailable ||
+      !option ||
+      !option.values.includes(value) ||
+      isOptionValueUnavailable(option, value)
+    ) return;
+
     setSelectedOptions((prev) => ({
       ...prev,
       [optionLabel]: value,
     }));
+    setValidationAttempted(false);
   };
 
   const handleAddToCart = () => {
@@ -431,7 +534,6 @@ export default function ProductDetailPageClient({
                   </div>
 
                   {customizationOptions.map((option) => {
-                    const isSelected = Boolean(selectedOptions[option.label]);
                     const currentSelectedValue = selectedOptions[option.label] ?? "";
 
                     return (
@@ -453,7 +555,8 @@ export default function ProductDetailPageClient({
                         {/* Variant Pills with Price Delta Indicators */}
                         <div className="flex flex-wrap gap-2">
                           {option.values.map((val) => {
-                            const isChosen = currentSelectedValue === val;
+                            const outOfStock = productUnavailable || isOptionValueUnavailable(option, val);
+                            const isChosen = !outOfStock && currentSelectedValue === val;
                             const pricingInfo = option.valuesWithPricing?.find((vp) => vp.label === val);
                             const priceDelta = pricingInfo?.priceDelta ?? 0;
 
@@ -461,15 +564,26 @@ export default function ProductDetailPageClient({
                               <button
                                 key={val}
                                 type="button"
+                                disabled={outOfStock}
+                                aria-disabled={outOfStock}
+                                aria-pressed={isChosen}
+                                title={outOfStock ? `${val} — Out of stock` : undefined}
                                 onClick={() => handleSelectOption(option.label, val)}
                                 className={`group flex items-center gap-2 rounded-xl px-3.5 py-2.5 font-sans text-[12px] transition-all ${
-                                  isChosen
+                                  outOfStock
+                                    ? "cursor-not-allowed border border-[#D8D0C6] bg-[#E9E3DA] text-[#91877D] opacity-60"
+                                    : isChosen
                                     ? "bg-[#294536] text-[#FAF4EC] shadow-md ring-2 ring-[#294536]/30 font-medium"
                                     : "border border-[rgba(111,100,86,0.2)] bg-white/90 text-[#3D302C] hover:border-[#294536] hover:bg-white"
                                 }`}
                               >
-                                <span>{val}</span>
-                                {priceDelta !== 0 && (
+                                <span className={outOfStock ? "line-through" : ""}>{val}</span>
+                                {outOfStock && (
+                                  <span className="text-[10px] font-medium text-[#9A6254] no-underline">
+                                    Out of stock
+                                  </span>
+                                )}
+                                {!outOfStock && priceDelta !== 0 && (
                                   <span
                                     className={`rounded-full px-1.5 py-0.5 text-[10px] font-semibold ${
                                       isChosen
@@ -530,9 +644,10 @@ export default function ProductDetailPageClient({
                 <button
                   type="button"
                   onClick={handleBuyNow}
-                  className="flex min-h-[50px] w-full items-center justify-center gap-2 rounded-xl bg-[#294536] text-[11px] font-medium uppercase tracking-[0.22em] text-[#FAF4EC] shadow-md transition-all hover:bg-[#20362a] hover:shadow-lg focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#294536]"
+                  disabled={productUnavailable}
+                  className="flex min-h-[50px] w-full items-center justify-center gap-2 rounded-xl bg-[#294536] text-[11px] font-medium uppercase tracking-[0.22em] text-[#FAF4EC] shadow-md transition-all hover:bg-[#20362a] hover:shadow-lg focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#294536] disabled:cursor-not-allowed disabled:opacity-50"
                 >
-                  <span>Buy Now</span>
+                  <span>{productUnavailable ? "Out of Stock" : "Buy Now"}</span>
                   <span aria-hidden>→</span>
                 </button>
 
@@ -540,13 +655,16 @@ export default function ProductDetailPageClient({
                 <button
                   type="button"
                   onClick={handleAddToCart}
-                  className={`flex min-h-[48px] w-full items-center justify-center gap-2 rounded-xl border border-[#294536] text-[11px] font-medium uppercase tracking-[0.2em] transition-all ${
+                  disabled={productUnavailable}
+                  className={`flex min-h-[48px] w-full items-center justify-center gap-2 rounded-xl border border-[#294536] text-[11px] font-medium uppercase tracking-[0.2em] transition-all disabled:cursor-not-allowed disabled:opacity-50 ${
                     addedRecently
                       ? "bg-[#294536]/10 text-[#294536] font-semibold"
                       : "bg-transparent text-[#294536] hover:bg-[#294536]/5"
                   }`}
                 >
-                  {addedRecently ? (
+                  {productUnavailable ? (
+                    <span>Out of Stock</span>
+                  ) : addedRecently ? (
                     <>
                       <Check size={14} strokeWidth={2.5} />
                       <span>Added to Bag ✓</span>
