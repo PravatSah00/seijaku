@@ -304,8 +304,10 @@ export default function CheckoutPageClient() {
 
   // Determine line items for checkout (gift bundle, single item, or full cart)
   const lineItems = useMemo<CheckoutLineItem[]>(() => {
-    if (isGiftMode && giftBundle && giftBundle.items.length > 0) {
-      return giftBundle.items;
+    if (isGiftMode) {
+      console.log(giftBundle);
+      // Gift Builder already supplies variant-adjusted prices and selected options.
+      return giftBundle?.items ?? [];
     }
     if (singleItem) {
       let unitPrice = singleItem.price;
@@ -577,7 +579,7 @@ export default function CheckoutPageClient() {
                         </div>
                       )}
 
-                      {singleItem?.slug === line.productSlug &&
+                      {!isGiftMode && singleItem?.slug === line.productSlug &&
                         singleItem?.customizationOptions &&
                         singleItem.customizationOptions.length > 0 && (
                           <div className="mt-4 border-t border-[#d8cec1]/60 pt-3">
@@ -981,12 +983,12 @@ export default function CheckoutPageClient() {
                     }
 
                     // Do not allow payment for a known unavailable product or option.
-                    if (singleItem && isInventoryUnavailable(singleItem)) {
+                    if (!isGiftMode && singleItem && isInventoryUnavailable(singleItem)) {
                       setError("This product is currently out of stock.");
                       return;
                     }
 
-                    if (singleItem?.customizationOptions && singleItem.customizationOptions.length > 0) {
+                    if (!isGiftMode && singleItem?.customizationOptions && singleItem.customizationOptions.length > 0) {
                       const unselectedOption = singleItem.customizationOptions.find(
                         (opt) => !selectedOptionsState[opt.label]
                       );

@@ -8,11 +8,12 @@ import { Sparkles } from "lucide-react";
 
 import { getShopProductUseCase, hasVariantSelector, type ProductView } from "@/src/lib/product-types";
 import { canonicalShopRoutes } from "@/src/lib/shop-routes";
-import type { ProductSelectionPayload } from "../utils";
+import { getGiftUnitPrice, type ProductSelectionPayload } from "../utils";
 
 type ProductDetailDrawerProps = {
   item: ProductView | null;
   isOpen: boolean;
+  initialSelectedOptions?: Record<string, string> | null;
   onClose: () => void;
   selectedCountForProduct?: number;
   canAddMore?: boolean;
@@ -24,9 +25,67 @@ type ProductDetailDrawerProps = {
 
 const ENRICHMENT_TIMEOUT_MS = 8_000;
 
+/**
+ * Read stock information already provided by your product data.
+ * Missing inventory metadata is treated as unknown (not automatically sold out).
+ * Do not guess stock availability from a price or an option's display label.
+ */
+function isInventoryUnavailable(value: unknown): boolean {
+  if (typeof value !== "object" || value === null) return false;
+  const data = value as Record<string, unknown>;
+
+  // Prefer an explicit sellability decision (supports backorders).
+  if (typeof data.availableForSale === "boolean") return !data.availableForSale;
+
+  // Common boolean stock flags.
+  const availableFlags = ["available", "isAvailable", "inStock", "isInStock"];
+  if (availableFlags.some((field) => data[field] === false)) return true;
+
+  const unavailableFlags = ["outOfStock", "isOutOfStock", "soldOut", "isSoldOut"];
+  if (unavailableFlags.some((field) => data[field] === true)) return true;
+
+  const quantityFields = [
+    "inventoryQuantity", "quantityAvailable", "availableQuantity",
+    "stockQuantity", "stock", "stockLevel",
+  ];
+  if (quantityFields.some((field) =>
+    typeof data[field] === "number" && (data[field] as number) <= 0
+  )) return true;
+
+  const status = String(data.status ?? data.inventoryStatus ?? "")
+    .trim()
+    .toLowerCase()
+    .replace(/[\s_-]+/g, " ");
+  return ["out of stock", "sold out", "unavailable"].includes(status);
+}
+
+type ProductOption = NonNullable<ProductView["customizationOptions"]>[number];
+
+/** Checks stock for one choice, not stock for the whole product. */
+function isOptionValueUnavailable(option: ProductOption, value: string): boolean {
+  const pricedValue = option.valuesWithPricing?.find((entry) => entry.label === value);
+  if (isInventoryUnavailable(pricedValue)) return true;
+
+  // Optional support for apps that keep stock separately from variant pricing.
+  const optionRecord = option as unknown as Record<string, unknown>;
+  for (const field of ["valuesWithStock", "valuesWithAvailability", "valuesWithInventory"]) {
+    const entries = optionRecord[field];
+    if (!Array.isArray(entries)) continue;
+    const match = entries.find((entry: unknown) => {
+      if (typeof entry !== "object" || entry === null) return false;
+      const row = entry as Record<string, unknown>;
+      return row.label === value || row.value === value;
+    });
+    if (isInventoryUnavailable(match)) return true;
+  }
+
+  return false;
+}
+
 export default function ProductDetailDrawer({
   item,
   isOpen,
+  initialSelectedOptions,
   onClose,
   selectedCountForProduct = 0,
   canAddMore = true,
@@ -45,9 +104,19 @@ export default function ProductDetailDrawer({
   const useCase = item ? getShopProductUseCase(item) : undefined;
   const showVariants = item ? hasVariantSelector(item) : false;
   const customizationOptions = showVariants ? item?.customizationOptions ?? [] : [];
-  const allRequiredSelected = customizationOptions.length === 0 || customizationOptions
-    .every((option) => Boolean(selectedOptions[option.label]));
-  const selectionLabel = Object.values(selectedOptions).filter(Boolean).join(" · ");
+  const validSelectedOptions: Record<string, string> = Object.fromEntries(
+    customizationOptions.flatMap((option) => {
+      const value = selectedOptions[option.label];
+      return value && option.values.includes(value) && !isOptionValueUnavailable(option, value)
+        ? [[option.label, value] as const]
+        : [];
+    }),
+  );
+  const allRequiredSelected = customizationOptions.every(
+    (option) => Boolean(validSelectedOptions[option.label]),
+  );
+  const selectionLabel = Object.values(validSelectedOptions).join(" · ");
+  const currentPrice = getGiftUnitPrice(item, validSelectedOptions);
   const resolvedVideoUrl = item?.videoUrl || enrichedVideoUrl || null;
   const isAlreadyInGift = selectedCountForProduct > 0;
 
@@ -66,10 +135,28 @@ export default function ProductDetailDrawer({
   useEffect(() => {
     setShowFullDesc(false);
     if (!isOpen) {
-      setSelectedOptions({});
       setActiveMedia(null);
     }
   }, [isOpen, item?.slug]);
+
+  // Restore only actual product options, not gift packaging/category metadata.
+  useEffect(() => {
+    if (!isOpen) {
+      setSelectedOptions({});
+      return;
+    }
+
+    const restored: Record<string, string> = {};
+    if (showVariants) {
+      for (const option of item?.customizationOptions ?? []) {
+        const value = initialSelectedOptions?.[option.label];
+        if (value && option.values.includes(value) && !isOptionValueUnavailable(option, value)) {
+          restored[option.label] = value;
+        }
+      }
+    }
+    setSelectedOptions(restored);
+  }, [isOpen, item?.slug, item?.customizationOptions, showVariants, initialSelectedOptions]);
 
   useEffect(() => {
     if (!isOpen || !item?.slug) {
@@ -199,7 +286,7 @@ export default function ProductDetailDrawer({
                 {item.title}
               </h2>
               <span className="font-sans text-[18px] font-medium text-[#2A1D1B] shrink-0">
-                {item.priceLabel}
+                {`₹${currentPrice.toLocaleString("en-IN")}`}
               </span>
             </div>
 
@@ -244,24 +331,38 @@ export default function ProductDetailDrawer({
                   </label>
                   <div className="flex flex-wrap gap-2">
                     {opt.values.map((val) => {
-                      const active = selectedOptions[opt.label] === val;
+                      const isOutOfStock = isOptionValueUnavailable(opt, val);
+                      const active = !isOutOfStock && validSelectedOptions[opt.label] === val;
+                      const priceDelta = opt.valuesWithPricing?.find((entry) => entry.label === val)?.priceDelta ?? 0;
                       return (
                         <button
                           key={val}
                           type="button"
-                          onClick={() =>
+                          disabled={isOutOfStock}
+                          aria-pressed={active}
+                          onClick={() => {
+                            if (isOutOfStock) return;
                             setSelectedOptions((prev) => ({
                               ...prev,
                               [opt.label]: val,
-                            }))
-                          }
+                            }));
+                          }}
                           className={`rounded-lg px-3.5 py-2 text-[12px] font-medium transition-all ${
-                            active
-                              ? "bg-[#2B3B2F] text-[#F6EEE4] shadow-sm ring-2 ring-[#2B3B2F]/20"
-                              : "border border-[#D4C3B2] bg-[#FAF4EC] text-[#4C413A] hover:bg-[#EFE3D3]"
+                            isOutOfStock
+                              ? "cursor-not-allowed border border-[#D4C3B2] bg-[#EFE5D8] text-[#8C7A6E] opacity-60"
+                              : active
+                                ? "bg-[#2B3B2F] text-[#F6EEE4] shadow-sm ring-2 ring-[#2B3B2F]/20"
+                                : "border border-[#D4C3B2] bg-[#FAF4EC] text-[#4C413A] hover:bg-[#EFE3D3]"
                           }`}
                         >
-                          {val}
+                          <span className={isOutOfStock ? "line-through" : undefined}>{val}</span>
+                          {isOutOfStock ? (
+                            <span className="ml-1 text-[10px]">(Out of stock)</span>
+                          ) : priceDelta !== 0 ? (
+                            <span className="ml-1 text-[10px] opacity-80">
+                              ({priceDelta > 0 ? "+" : "-"}₹{Math.abs(priceDelta).toLocaleString("en-IN")})
+                            </span>
+                          ) : null}
                         </button>
                       );
                     })}
@@ -277,9 +378,10 @@ export default function ProductDetailDrawer({
               type="button"
               disabled={!allRequiredSelected || !canAddMore}
               onClick={() => {
+                if (!allRequiredSelected || !canAddMore) return;
                 onAddGiftProduct?.(item, {
                   label: selectionLabel || null,
-                  options: customizationOptions.length > 0 ? selectedOptions : null,
+                  options: customizationOptions.length > 0 ? validSelectedOptions : null,
                 });
                 onClose();
               }}

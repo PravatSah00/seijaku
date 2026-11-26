@@ -9,6 +9,8 @@ import type { ProductSelectionPayload } from "../utils";
 
 type CompactProductCardProps = {
     item: ProductView;
+    selectedPriceLabel?: string;
+    selectedOptionLabel?: string;
     selectedCountForProduct: number;
     canAddMore: boolean;
     categoryLimitReached?: boolean;
@@ -21,6 +23,8 @@ type CompactProductCardProps = {
 
 export default function CompactProductCard({
     item,
+    selectedPriceLabel,
+    selectedOptionLabel,
     selectedCountForProduct,
     canAddMore,
     categoryLimitReached = false,
@@ -117,8 +121,13 @@ export default function CompactProductCard({
                         Price
                     </p> */}
                     <p className="mt-1 text-[14px] text-[#2f2924]">
-                        {item.priceLabel}
+                        {isSelected ? (selectedPriceLabel ?? item.priceLabel) : item.priceLabel}
                     </p>
+                    {isSelected && selectedOptionLabel && (
+                        <p className="mt-1 text-[11px] text-[#4A6350]">
+                            Selected: {selectedOptionLabel}
+                        </p>
+                    )}
                 </div>
 
                 <div className="mt-4 border-t border-[#e6ddd0] pt-4">

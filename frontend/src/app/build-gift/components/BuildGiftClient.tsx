@@ -22,6 +22,7 @@ import {
     type GiftItemSelection,
     type GiftStepKey,
     type ProductSelectionPayload,
+    getGiftUnitPrice,
 } from "../utils";
 import {
     DEFAULT_GIFT_PRESETS,
@@ -464,7 +465,12 @@ function GiftSidebar({
                                         </div>
                                     </div>
                                     <span className="ml-auto shrink-0 font-sans text-[12px] font-medium text-[#2A1D1B]">
-                                        {formatPrice(item.product.price)}
+                                        {formatPrice(
+                                            getGiftUnitPrice(
+                                                item.product,
+                                                item.options?.options,
+                                            ),
+                                        )}
                                     </span>
                                 </div>
                             );
@@ -822,8 +828,16 @@ function buildGiftCheckoutItems(
         return {
             productSlug: item.product.slug,
             title: item.product.title,
-            unitPrice: item.product.price,
-            priceLabel: item.product.priceLabel,
+            unitPrice: getGiftUnitPrice(
+                item.product,
+                item.options?.options,
+            ),
+            priceLabel: formatPrice(
+                getGiftUnitPrice(
+                    item.product,
+                    item.options?.options,
+                ),
+            ),
             quantity: 1,
             image: item.product.image,
             shortDescription: item.product.shortDescription,
@@ -1118,7 +1132,11 @@ export default function BuildGiftClient({
 
     const total = useMemo(() => {
         return resolvedGiftItems.reduce(
-            (sum, item) => sum + (item.product?.price ?? 0),
+            (sum, item) =>
+                sum + getGiftUnitPrice(
+                    item.product,
+                    item.options?.options,
+                ),
             0,
         );
     }, [resolvedGiftItems]);
@@ -1442,6 +1460,7 @@ export default function BuildGiftClient({
                                     <ProductDrawer
                                         key={`${activePreset.id}-${step.key}`}
                                         products={visibleProducts}
+                                        selectedGiftItems={giftItems}
                                         selectedCountsByProductId={countsByProductId}
                                         canAddMore={canAddMoreInStep}
                                         categoryLimitReached={categoryLimitReached}

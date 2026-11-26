@@ -22,7 +22,7 @@ import CompactProductCard from "./CompactProductCard";
 import ProductDetailDrawer from "./ProductDetailDrawer";
 import ShopFilterDrawer from "./ShopFilterDrawer";
 import ShopFilterRail from "./ShopFilterRail";
-import type { ProductSelectionPayload } from "../utils";
+import { getGiftUnitPrice, type GiftItemSelection, type ProductSelectionPayload } from "../utils";
 
 const INITIAL_BATCH_SIZE = 8;
 const LOAD_MORE_STEP = 8;
@@ -72,6 +72,7 @@ function sortProducts(items: ProductView[], sortBy: ShopSortOption) {
 
 type ProductDrawerProps = {
     products: ProductView[];
+    selectedGiftItems: GiftItemSelection[];
     selectedCountsByProductId: Record<string, number>;
     canAddMore: boolean;
     categoryLimitReached?: boolean;
@@ -86,6 +87,7 @@ type ProductDrawerProps = {
 
 export default function ProductDrawer({
     products,
+    selectedGiftItems,
     selectedCountsByProductId,
     canAddMore,
     categoryLimitReached = false,
@@ -116,6 +118,12 @@ export default function ProductDrawer({
     const detailProduct = detailSlug
         ? products.find((product) => product.slug === detailSlug) ?? null
         : null;
+
+    const selectedDetailItems = selectedGiftItems.filter(
+        (item) => item.productId === detailProduct?.id,
+    );
+
+    const selectedDetailItem = selectedDetailItems[selectedDetailItems.length - 1];
 
     useEffect(() => {
         if (detailProduct && loadingProductSlug) {
@@ -371,10 +379,19 @@ export default function ProductDrawer({
                                                     selectedCountsByProductId[
                                                         product.id
                                                     ] ?? 0;
+                                                const selectedItems = selectedGiftItems.filter(
+                                                    (item) => item.productId === product.id,
+                                                );
+                                                const selectedItem = selectedItems[selectedItems.length - 1];
+                                                const selectedPriceLabel = selectedItem
+                                                    ? `₹${getGiftUnitPrice(product, selectedItem.options?.options).toLocaleString("en-IN")}`
+                                                    : undefined;
                                                 return (
                                                     <CompactProductCard
                                                         key={product.id}
                                                         item={product}
+                                                        selectedPriceLabel={selectedPriceLabel}
+                                                        selectedOptionLabel={selectedItem?.options?.label ?? undefined}
                                                         selectedCountForProduct={
                                                             countForProduct
                                                         }
@@ -430,6 +447,9 @@ export default function ProductDrawer({
             <ProductDetailDrawer
                 item={detailProduct}
                 isOpen={Boolean(detailProduct)}
+                initialSelectedOptions={
+                    selectedDetailItem?.options?.options
+                }
                 onClose={() => {
                     setLoadingProductSlug(null);
                     stopPageLoader();

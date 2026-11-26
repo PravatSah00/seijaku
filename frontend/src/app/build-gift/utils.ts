@@ -11,6 +11,7 @@
  */
 
 import type { GiftCategoryKey } from "@/src/lib/gift-presets";
+import { ProductView } from "@/src/lib/product-types";
 
 export type GiftStepKey =
     | GiftCategoryKey
@@ -107,9 +108,9 @@ export function getStoredGiftItems(): GiftItemSelection[] {
                         (item): item is GiftItemSelection =>
                             Boolean(
                                 item &&
-                                    typeof item === "object" &&
-                                    typeof item.productId === "string" &&
-                                    item.productId,
+                                typeof item === "object" &&
+                                typeof item.productId === "string" &&
+                                item.productId,
                             ),
                     )
                     .map((item) => ({
@@ -226,5 +227,35 @@ export function clearGiftCheckoutBundle(): void {
     if (typeof window === "undefined") return;
     try {
         window.localStorage.removeItem(GIFT_CHECKOUT_STORAGE_KEY);
-    } catch {}
+    } catch { }
+}
+
+/**
+ * Get the final unit price for a gift product, including any selected customization options.
+ * Returns 0 if the product is null or undefined.
+ * @param product 
+ * @param selectedOptions 
+ * @returns 
+ */
+export function getGiftUnitPrice(
+    product: ProductView | null | undefined,
+    selectedOptions?: Record<string, string> | null,
+): number {
+    if (!product) return 0;
+
+    let finalPrice = product.price;
+
+    for (const option of product.customizationOptions ?? []) {
+        const selectedValue = selectedOptions?.[option.label];
+
+        if (!selectedValue) continue;
+
+        const pricing = option.valuesWithPricing?.find(
+            (value) => value.label === selectedValue,
+        );
+
+        finalPrice += pricing?.priceDelta ?? 0;
+    }
+
+    return Math.max(0, finalPrice);
 }
